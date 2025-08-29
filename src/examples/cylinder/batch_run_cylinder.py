@@ -16,7 +16,7 @@ from scipy.spatial import cKDTree
 import matlab.engine
 eng = matlab.engine.start_matlab()
 eng.cd('/Users/jaking/Desktop/PhD/Cylinder', nargout=0)
-eng.load('lqr_controller_workspace.mat', nargout=0)
+eng.load('lqr_controller_workspace_new.mat', nargout=0)
 
 def cleanup_redundant_files(save_dir):
     """Delete redundant Uprev files to save disk space"""
@@ -381,13 +381,14 @@ def run_lidcavity_with_ic(Re, xloc, yloc, radius, amplitude, save_dir, num_steps
     u_ctrl_prev = 0.0
     for _ in range(fs.params_time.num_steps):
         u_current = fs.fields.u_.vector().get_local()
-        u_ctrl = eng.lqr_controller_matlab(
+        u_ctrl = eng.lqr_controller_matlab_new(
             matlab.double(u_current.tolist()),
             eng.workspace['IMInfo'],
             eng.workspace['RDInfo'],
             eng.workspace['Q'],
             eng.workspace['R'],
-            eng.workspace['d_1_conjugate'],
+            eng.workspace['W_f_z'],
+            eng.workspace['phi_z'],
             eng.workspace['steady_state_actuated'],
             matlab.double(u_ctrl_prev),
         )
@@ -687,7 +688,7 @@ def run_lidcavity_with_ic(Re, xloc, yloc, radius, amplitude, save_dir, num_steps
 def main():
 
     base_dir = Path("/Users/jaking/Desktop/PhD/cylinder")
-    parent_dir = base_dir / f"Re{Re}_lqr"
+    parent_dir = base_dir / f"Re{Re}_lqr_poly_5"
     parent_dir.mkdir(parents=True, exist_ok=True)
 
     # x_vals = np.linspace(0.2, 0.8, 3)
