@@ -13,6 +13,10 @@ from flowcontrol.controller import Controller
 from flowcontrol.sensor import SENSOR_TYPE, SensorPoint
 from examples.cylinder.compute_steady_state import Re
 from scipy.spatial import cKDTree
+import matlab.engine
+eng = matlab.engine.start_matlab()
+eng.cd('/Users/jaking/Desktop/PhD/Cylinder', nargout=0)
+eng.load('lqr_controller_workspace.mat', nargout=0)
 
 def cleanup_redundant_files(save_dir):
     """Delete redundant Uprev files to save disk space"""
@@ -300,7 +304,7 @@ def run_lidcavity_with_ic(Re, xloc, yloc, radius, amplitude, save_dir, num_steps
     params_time = flowsolverparameters.ParamTime(num_steps=num_steps, dt=0.005, Tstart=0.0)
 
     params_save = flowsolverparameters.ParamSave(
-        save_every=10, path_out=save_dir
+        save_every=100, path_out=save_dir
     )
 
     params_solver = flowsolverparameters.ParamSolver(
@@ -374,11 +378,25 @@ def run_lidcavity_with_ic(Re, xloc, yloc, radius, amplitude, save_dir, num_steps
 
     logger.info("Step several times")
     Kss = Controller.from_file(file=cwd / "data_input" / "Kopt_reduced13.mat", x0=0)
-
+    u_ctrl_prev = 0.0
     for _ in range(fs.params_time.num_steps):
-        y_meas = flu.MpiUtils.mpi_broadcast(fs.y_meas)
-        u_ctrl = Kss.step(y=-y_meas[0], dt=fs.params_time.dt)
-        fs.step(u_ctrl=[u_ctrl[0], u_ctrl[0]])
+        u_current = fs.fields.u_.vector().get_local()
+        u_ctrl = eng.lqr_controller_matlab(
+            matlab.double(u_current.tolist()),
+            eng.workspace['IMInfo'],
+            eng.workspace['RDInfo'],
+            eng.workspace['Q'],
+            eng.workspace['R'],
+            eng.workspace['d_1_conjugate'],
+            eng.workspace['steady_state_actuated'],
+            matlab.double(u_ctrl_prev),
+        )
+        u_ctrl = float(u_ctrl)  # Convert from matlab.double to float
+        fs.step(u_ctrl=[u_ctrl, u_ctrl])
+        u_ctrl_prev = u_ctrl
+        # y_meas = flu.MpiUtils.mpi_broadcast(fs.y_meas)
+        # u_ctrl = Kss.step(y=-y_meas[0], dt=fs.params_time.dt)
+        # fs.step(u_ctrl=[u_ctrl[0], u_ctrl[0]])
         # or
         # fs.step(u_ctrl=np.repeat(u_ctrl, repeats=2, axis=0))
 
@@ -669,7 +687,7 @@ def run_lidcavity_with_ic(Re, xloc, yloc, radius, amplitude, save_dir, num_steps
 def main():
 
     base_dir = Path("/Users/jaking/Desktop/PhD/cylinder")
-    parent_dir = base_dir / f"Re{Re}_short"
+    parent_dir = base_dir / f"Re{Re}_lqr"
     parent_dir.mkdir(parents=True, exist_ok=True)
 
     # x_vals = np.linspace(0.2, 0.8, 3)
@@ -680,7 +698,7 @@ def main():
     y_vals = [0.0]
     radius = 0.5
     amplitude = 1.0
-    num_steps = 200
+    num_steps = 20000
     count = 1
     for xloc in x_vals:
         for yloc in y_vals:
