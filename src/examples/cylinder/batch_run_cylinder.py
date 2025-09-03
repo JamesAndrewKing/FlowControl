@@ -688,7 +688,7 @@ def run_lidcavity_with_ic(Re, xloc, yloc, radius, amplitude, save_dir, num_steps
 def main():
 
     base_dir = Path("/Users/jaking/Desktop/PhD/cylinder")
-    parent_dir = base_dir / f"Re{Re}_lqr_poly_5"
+    parent_dir = base_dir / f"Re{Re}_lqr_poly_8"
     parent_dir.mkdir(parents=True, exist_ok=True)
 
     # x_vals = np.linspace(0.2, 0.8, 3)

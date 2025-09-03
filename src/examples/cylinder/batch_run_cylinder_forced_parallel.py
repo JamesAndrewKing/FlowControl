@@ -21,7 +21,7 @@ def run_single_simulation(args):
 
 if __name__ == "__main__":
     base_dir = Path("/Users/jaking/Desktop/PhD/cylinder")
-    parent_dir = base_dir / f"Re{Re}_forced_multisine"
+    parent_dir = base_dir / f"Re{Re}_forced_sweep_low_from_beginning"
     parent_dir.mkdir(parents=True, exist_ok=True)
 
     # Path to your autonomous simulation results

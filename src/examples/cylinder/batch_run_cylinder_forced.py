@@ -64,10 +64,10 @@ def run_forced_simulation(Re, save_dir, num_steps, autonomous_dir, forcing_ampli
     # This is what controls where in the autonomous simulation we restart from
     # To start from limit cylce, set Tstart=0.005*20000
     # params_time = flowsolverparameters.ParamTime(num_steps=num_steps, dt=0.005, Tstart=0.005*20000)
-    params_time = flowsolverparameters.ParamTime(num_steps=num_steps, dt=0.005, Tstart=10.0)
+    params_time = flowsolverparameters.ParamTime(num_steps=num_steps, dt=0.005, Tstart=0.0)
 
     params_save = flowsolverparameters.ParamSave(
-        save_every=100, path_out=save_dir
+        save_every=10, path_out=save_dir
     )
 
     params_solver = flowsolverparameters.ParamSolver(
@@ -82,10 +82,10 @@ def run_forced_simulation(Re, save_dir, num_steps, autonomous_dir, forcing_ampli
     params_mesh.user_data["yinf"] = 10
 
     params_restart = flowsolverparameters.ParamRestart(
-        save_every_old=100,
-        restart_order=2,
-        dt_old=0.005,
-        Trestartfrom=0,
+        # save_every_old=100,
+        # restart_order=2,
+        # dt_old=0.005,
+        # Trestartfrom=0,
     )
 
     # duplicate actuators (1 top, 1 bottom) but assign same control input to each
@@ -111,7 +111,7 @@ def run_forced_simulation(Re, save_dir, num_steps, autonomous_dir, forcing_ampli
     )
 
     params_ic = flowsolverparameters.ParamIC(
-        xloc=0.0, yloc=0.0, radius=0.5, amplitude=0.0
+        xloc=5.0, yloc=0.0, radius=0.5, amplitude=0.1
     )
 
     fs = CylinderFlowSolver(
@@ -127,56 +127,56 @@ def run_forced_simulation(Re, save_dir, num_steps, autonomous_dir, forcing_ampli
     )
 
     # When starting at limit cycle: 
-    fs.paths = {
-        # Reading from autonomous run
-        "U": autonomous_dir / "U_restart0,0.xdmf",
-        "P": autonomous_dir / "P_restart0,0.xdmf",
-        "Uprev": autonomous_dir / "Uprev_restart0,0.xdmf",
-        "Pprev": autonomous_dir / "Pprev_restart0,0.xdmf",
-        "U0": cwd / "data_output" / "steady" / "U0.xdmf",
-        "P0": cwd / "data_output" / "steady" / "P0.xdmf",
-        "mesh": params_mesh.meshpath,
-        # Writing to forced run
-        "U_restart": save_dir / "U_restart0,0.xdmf",
-        "P_restart": save_dir / "P_restart0,0.xdmf",
-        "Uprev_restart": save_dir / "Uprev_restart0,0.xdmf",
-        "Pprev_restart": save_dir / "Pprev_restart0,0.xdmf",
-        "timeseries": save_dir / "timeseries1D_restart0,0.csv",
-    }
+    # fs.paths = {
+    #     # Reading from autonomous run
+    #     "U": autonomous_dir / "U_restart0,0.xdmf",
+    #     "P": autonomous_dir / "P_restart0,0.xdmf",
+    #     "Uprev": autonomous_dir / "Uprev_restart0,0.xdmf",
+    #     "Pprev": autonomous_dir / "Pprev_restart0,0.xdmf",
+    #     "U0": cwd / "data_output" / "steady" / "U0.xdmf",
+    #     "P0": cwd / "data_output" / "steady" / "P0.xdmf",
+    #     "mesh": params_mesh.meshpath,
+    #     # Writing to forced run
+    #     "U_restart": save_dir / "U_restart0,0.xdmf",
+    #     "P_restart": save_dir / "P_restart0,0.xdmf",
+    #     "Uprev_restart": save_dir / "Uprev_restart0,0.xdmf",
+    #     "Pprev_restart": save_dir / "Pprev_restart0,0.xdmf",
+    #     "timeseries": save_dir / "timeseries1D_restart0,0.csv",
+    # }
 
-    logger.info("__init__(): successful!")
-
-    fs.load_steady_state()
-    fs.initialize_time_stepping(Tstart=fs.params_time.Tstart)
-
-    # When starting from beginning:
     # logger.info("__init__(): successful!")
 
-    # logger.info("Exporting subdomains...")
-    # flu.export_subdomains(
-    #     fs.mesh, fs.boundaries.subdomain, save_dir / "subdomains.xdmf"
-    # )
+    # fs.load_steady_state()
+    # fs.initialize_time_stepping(Tstart=fs.params_time.Tstart)
 
-    # logger.info("Load steady state...")
-    # fs.load_steady_state(
-    #     path_u_p=[
-    #         cwd / "data_output" / "steady" / f"U0.xdmf",
-    #         cwd / "data_output" / "steady" / f"P0.xdmf",
-    #     ]
-    # )
+    # When starting from beginning:
+    logger.info("__init__(): successful!")
 
-    # logger.info("Init time-stepping")
-    # fs.initialize_time_stepping(ic=None)  # or ic=dolfin.Function(fs.W)
+    logger.info("Exporting subdomains...")
+    flu.export_subdomains(
+        fs.mesh, fs.boundaries.subdomain, save_dir / "subdomains.xdmf"
+    )
+
+    logger.info("Load steady state...")
+    fs.load_steady_state(
+        path_u_p=[
+            cwd / "data_output" / "steady" / f"U0.xdmf",
+            cwd / "data_output" / "steady" / f"P0.xdmf",
+        ]
+    )
+
+    logger.info("Init time-stepping")
+    fs.initialize_time_stepping(ic=None)  # or ic=dolfin.Function(fs.W)
 
     # --- HOTFIX: Load u_optimal.mat and prepare control signal ---
-    u_optimal_path = Path("/Users/jaking/Desktop/PhD/cylinder/u_ctrl_lqr.mat")
-    mat = loadmat(u_optimal_path)
-    # t_interp = mat['t_recovered'].flatten()
-    u_optimal = mat['u_ctrl_lqr_interp'].flatten()
-    sim_times = np.arange(fs.params_time.Tstart, 
-                         fs.params_time.Tstart + fs.params_time.dt * fs.params_time.num_steps, 
-                         fs.params_time.dt)
-    # u_optimal_interp = np.interp(sim_times, t_interp, u_optimal)
+    # u_optimal_path = Path("/Users/jaking/Desktop/PhD/cylinder/u_ctrl_lqr.mat")
+    # mat = loadmat(u_optimal_path)
+    # # t_interp = mat['t_recovered'].flatten()
+    # u_optimal = mat['u_ctrl_lqr_interp'].flatten()
+    # sim_times = np.arange(fs.params_time.Tstart, 
+    #                      fs.params_time.Tstart + fs.params_time.dt * fs.params_time.num_steps, 
+    #                      fs.params_time.dt)
+    # # u_optimal_interp = np.interp(sim_times, t_interp, u_optimal)
     # ------------------------------------------------------------
     
     # Chirp:
@@ -184,9 +184,9 @@ def run_forced_simulation(Re, save_dir, num_steps, autonomous_dir, forcing_ampli
     for i in range(fs.params_time.num_steps):
         y_meas = flu.MpiUtils.mpi_broadcast(fs.y_meas)
         # u_ctrl = Kss.step(y=-y_meas[0], dt=fs.params_time.dt)
-        u_ctrl = u_optimal[i]
+        # u_ctrl = u_optimal[i]
         # u_ctrl = forcing_amplitude * np.sin(forcing_frequency * fs.t)
-        # u_ctrl = forcing_amplitude * chirp(fs.t, f0=0.0, f1=forcing_frequency/(2 * np.pi), t1=fs.params_time.Tfinal, method='linear')
+        u_ctrl = forcing_amplitude * chirp(fs.t, f0=0.0, f1=forcing_frequency/(2 * np.pi), t1=fs.params_time.Tfinal, method='linear')
         fs.step(u_ctrl=np.repeat(u_ctrl, repeats=2, axis=0))
 
     # # Multisine parameters
