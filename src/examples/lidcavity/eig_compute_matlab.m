@@ -147,8 +147,11 @@ disp(['Largest real part eigenvalue: ', num2str(top_eig.lambda)]);
 
 % Save corresponding eigenvector
 found_vec = top_eig.vec;
-save('data_output/slow_eigenvector.mat', 'found_vec');
+% save('data_output/slow_eigenvector.mat', 'found_vec');
 save('data_output/eig_data.mat', 'eig_data');
+eigval = eig_data(1).lambda
+save(sprintf('data_output/eigval_%d.mat', Re), 'eigval');
+
 
 %%
 all_lambda = [eig_data.lambda];
