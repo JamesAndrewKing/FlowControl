@@ -29,7 +29,7 @@ from flowcontrol.controller import Controller
 from flowcontrol.sensor import SENSOR_TYPE, SensorPoint
 from dolfin import div, grad, project
 
-Re = 100
+Re = 30
 
 def main():
     # LOG

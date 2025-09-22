@@ -25,7 +25,7 @@ from flowcontrol.controller import Controller
 from flowcontrol.sensor import SENSOR_TYPE, SensorPoint
 from dolfin import div, grad, project, dot, inner, nabla_grad, dx
 
-Re = 100
+Re = 60
 
 def solve_linearized_steady_state(fs, U0_base, u_ctrl, max_iter=50, tol=1e-8):
     """

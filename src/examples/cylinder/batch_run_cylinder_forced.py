@@ -2,6 +2,7 @@ from pathlib import Path
 import numpy as np
 from scipy.io import loadmat
 from scipy.signal import chirp
+from scipy.interpolate import CubicSpline
 import dolfin
 import logging
 import time
@@ -181,12 +182,17 @@ def run_forced_simulation(Re, save_dir, num_steps, autonomous_dir, forcing_ampli
     
     # Chirp:
     # Kss = Controller.from_file(file=cwd / "data_input" / "Kopt_reduced13.mat", x0=0)
+    # Spline:
+    # knots = np.linspace(fs.params_time.Tstart, fs.params_time.Tfinal, 10)
+    # values = np.random.uniform(-forcing_amplitude, forcing_amplitude, len(knots))
+    # cs = CubicSpline(knots, values)
     for i in range(fs.params_time.num_steps):
         y_meas = flu.MpiUtils.mpi_broadcast(fs.y_meas)
         # u_ctrl = Kss.step(y=-y_meas[0], dt=fs.params_time.dt)
         # u_ctrl = u_optimal[i]
-        # u_ctrl = forcing_amplitude * np.sin(forcing_frequency * fs.t)
-        u_ctrl = forcing_amplitude * chirp(fs.t, f0=0.0, f1=forcing_frequency/(2 * np.pi), t1=fs.params_time.Tfinal, method='linear')
+        # u_ctrl = cs(fs.t)
+        u_ctrl = forcing_amplitude * np.sin(forcing_frequency * fs.t)
+        # u_ctrl = forcing_amplitude * chirp(fs.t, f0=0.0, f1=forcing_frequency/(2 * np.pi), t1=fs.params_time.Tfinal, method='linear')
         fs.step(u_ctrl=np.repeat(u_ctrl, repeats=2, axis=0))
 
     # # Multisine parameters
@@ -220,7 +226,7 @@ if __name__ == "__main__":
     forcing_frequency = 1.0
 
     autonomous_dir = base_dir / f"Re{Re}_autonomous" / "run1"
-    forced_dir = base_dir / f"Re{Re}_control_try" / "run1"
+    forced_dir = base_dir / f"Re{Re}_spline_try" / "run1"
     forced_dir.mkdir(parents=True, exist_ok=True)
 
     # Run autonomous simulation

@@ -7,12 +7,12 @@ from tqdm import tqdm
 
 def run_single_simulation(args):
     """Wrapper function for parallel execution"""
-    xloc, yloc, radius, amplitude, Re, save_dir, num_steps = args
+    xloc, yloc, radius, amplitude, u_ctrl_const, Re, save_dir, num_steps = args
 
     print(f"Starting simulation xloc={xloc:.3f}, yloc={yloc:.3f} in process {mp.current_process().name}")
 
     try:
-        run_lidcavity_with_ic(Re, xloc, yloc, radius, amplitude, save_dir, num_steps)
+        run_lidcavity_with_ic(Re, xloc, yloc, radius, amplitude, u_ctrl_const, save_dir, num_steps)
         print(f"✓ Completed simulation xloc={xloc:.3f}, yloc={yloc:.3f}")
         return True
     except Exception as e:
@@ -21,14 +21,17 @@ def run_single_simulation(args):
 
 if __name__ == "__main__":
     base_dir = Path("/Users/jaking/Desktop/PhD/cylinder")
-    parent_dir = base_dir / f"Re{Re}_controlled_2"
+    parent_dir = base_dir / f"Re{Re}_data_30"
     parent_dir.mkdir(parents=True, exist_ok=True)
 
     x_vals = np.linspace(4.0, 5.0, 3)
     y_vals = np.linspace(0.0, 0.1, 3)
+    # u_ctrl_const_vals = np.linspace(-1.0, 1.0, 10)
+    u_ctrl_const_vals = [0.0]
     radius = 0.5
     # amplitude = 0.1
-    amplitude = 1.0
+    # amplitude = 1.0
+    amplitude = 2.0
     num_steps = 20000
     # x_vals = [2.0]
     # y_vals = [0.0]
@@ -36,14 +39,15 @@ if __name__ == "__main__":
     # Prepare all simulation parameters
     simulation_args = []
     count = 1
-    for xloc in x_vals:
-        for yloc in y_vals:
-            save_dir = parent_dir / f"run{count}"
-            save_dir.mkdir(parents=True, exist_ok=True)
+    for u_ctrl_const in u_ctrl_const_vals:
+        for xloc in x_vals:
+            for yloc in y_vals:
+                save_dir = parent_dir / f"run{count}"
+                save_dir.mkdir(parents=True, exist_ok=True)
 
-            # Store parameters for this simulation
-            simulation_args.append((xloc, yloc, radius, amplitude, Re, save_dir, num_steps))
-            count += 1
+                # Store parameters for this simulation
+                simulation_args.append((xloc, yloc, radius, amplitude, u_ctrl_const, Re, save_dir, num_steps))
+                count += 1
 
     # Determine number of processes (adjust based on your system)
     n_processes = min(mp.cpu_count() - 2, len(simulation_args))  # Leave 2 cores free
