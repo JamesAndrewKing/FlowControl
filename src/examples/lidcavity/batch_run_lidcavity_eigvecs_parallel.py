@@ -18,7 +18,7 @@ def run_single_simulation(args):
 
 if __name__ == "__main__":
     base_dir = Path("/Users/jaking/Desktop/PhD/lid_driven_cavity")
-    parent_dir = base_dir / f"Re{Re}_test"
+    parent_dir = base_dir / f"Re{Re}_test_7950"
     parent_dir.mkdir(parents=True, exist_ok=True)
 
     # phase_angles = np.linspace(0, 2*np.pi, 1)

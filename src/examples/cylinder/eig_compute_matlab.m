@@ -118,6 +118,8 @@ for omega = omega_list
     try
         [vecs, vals] = eigs(A, E, neig, target, opts);
         lambda = diag(vals);
+        % Compute left eigenvectors for this batch
+        [lvecs, ~] = eigs(A', E', neig, target, opts); % left eigenvectors
         for j = 1:length(lambda)
             % Check if eigenvalue already exists (up to tolerance)
             is_duplicate = false;
@@ -129,7 +131,8 @@ for omega = omega_list
             end
             if ~is_duplicate
                 eig_data(end+1).lambda = lambda(j);
-                eig_data(end).vec = vecs(:, j);
+                eig_data(end).vec = vecs(:, j);    % right eigenvector
+                eig_data(end).lvec = lvecs(:, j);  % left eigenvector
             end
         end
     catch ME
@@ -147,7 +150,9 @@ disp(['Largest real part eigenvalue: ', num2str(top_eig.lambda)]);
 
 % Save corresponding eigenvector
 found_vec = top_eig.vec;
+found_lvec = top_eig.lvec;
 save('data_output/slow_eigenvector.mat', 'found_vec');
+save('data_output/slow_lefteigenvector.mat', 'found_lvec');
 save('data_output/eig_data.mat', 'eig_data');
 
 %%

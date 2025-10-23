@@ -21,7 +21,7 @@ def run_single_simulation(args):
 
 if __name__ == "__main__":
     base_dir = Path("/Users/jaking/Desktop/PhD/cylinder")
-    parent_dir = base_dir / f"Re{Re}_data_30"
+    parent_dir = base_dir / f"Re{Re}_data_45"
     parent_dir.mkdir(parents=True, exist_ok=True)
 
     x_vals = np.linspace(4.0, 5.0, 3)

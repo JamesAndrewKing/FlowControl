@@ -63,7 +63,11 @@ class CylinderFlowSolver(flowsolver.FlowSolver):
 
         ## Cylinder
         radius = self.params_flow.user_data["D"] / 2
-        ldelta = self.params_control.actuator_list[0].width
+        # ldelta = self.params_control.actuator_list[0].width
+        if hasattr(self.params_control.actuator_list[0], "width"):
+            ldelta = self.params_control.actuator_list[0].width
+        else:
+            ldelta = 0.0
 
         # close_to_cylinder_cpp = between_cpp("x[0]*x[0] + x[1]*x[1]", "0", "2*radius*radius")
         close_to_cylinder_cpp = (

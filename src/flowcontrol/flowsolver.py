@@ -243,6 +243,7 @@ class FlowSolver(ABC):
 
         self.fields.u_ = u_
         self.fields.p_ = p_
+        self.fields.up_ = self.merge(u_, p_)
         self.fields.u_n = u_n
         self.fields.u_nn = u_nn
         self.fields.p_n = p_n
