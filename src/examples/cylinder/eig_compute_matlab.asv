@@ -115,6 +115,8 @@ omega_list = [omega_list1, omega_list2];
 right_eigs = []; % struct array: .lambda, .vec
 left_eigs  = []; % struct array: .lambda, .vec
 
+tol = 1e-2;  % tolerance for matching eigenvalues
+
 for omega = omega_list
     target = omega;
     try
@@ -136,36 +138,27 @@ for omega = omega_list
     end
 end
 
-%%
-
 % --- Now match right and left eigenpairs ---
 eig_data = [];
-used_left = false(1, length(left_eigs)); % Track which left eigenvectors have been matched
-tol = 1e-4;  % Start with a moderate tolerance
-
 for i = 1:length(right_eigs)
     % Find left eigenvalue closest to conj(right eigenvalue)
-    diffs = abs([left_eigs.lambda] - right_eigs(i).lambda);
-    diffs(used_left) = Inf; % Don't match already used left eigenvectors
-    [min_dist, idx_left] = min(diffs);
+    [min_dist, idx_left] = min(abs([left_eigs.lambda] - conj(right_eigs(i).lambda)));
     if min_dist < tol
-        eig_data(end+1).lambda = right_eigs(i).lambda;
-        eig_data(end).vec = right_eigs(i).vec;
-        eig_data(end).lvec = conj(left_eigs(idx_left).vec);
-        used_left(idx_left) = true; % Mark this left eigenvector as used
-    end
-end
-
-% --- Remove duplicates by eigenvalue (within tol) ---
-unique_idx = true(1, length(eig_data));
-for i = 1:length(eig_data)
-    for j = i+1:length(eig_data)
-        if abs(eig_data(i).lambda - eig_data(j).lambda) < tol
-            unique_idx(j) = false;
+        % Check if eigenvalue already exists (up to tolerance)
+        is_duplicate = false;
+        for k = 1:length(eig_data)
+            if abs(eig_data(k).lambda - right_eigs(i).lambda) < tol
+                is_duplicate = true;
+                break;
+            end
+        end
+        if ~is_duplicate
+            eig_data(end+1).lambda = right_eigs(i).lambda;
+            eig_data(end).vec = right_eigs(i).vec;
+            eig_data(end).lvec = left_eigs(idx_left).vec;
         end
     end
 end
-eig_data = eig_data(unique_idx);
 
 % --- Sort eig_data by real part of eigenvalues (descending) ---
 [~, sort_idx] = sort(real([eig_data.lambda]), 'descend');

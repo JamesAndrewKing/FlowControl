@@ -211,11 +211,28 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     E_indptr = mat_E['E_indptr'].flatten()
     E_shape = tuple(mat_E['E_shape'].flatten())
     E = csr_matrix((E_data, E_indices, E_indptr), shape=E_shape)
+    mat_A = loadmat(str(cwd / 'data_output' / 'operators' / 'A_sparse.mat'))
+    A_data = mat_A['A_data'].flatten()
+    A_indices = mat_A['A_indices'].flatten()
+    A_indptr = mat_A['A_indptr'].flatten()
+    A_shape = tuple(mat_A['A_shape'].flatten())
+    A = csr_matrix((A_data, A_indices, A_indptr), shape=A_shape)
 
     # Find the most unstable mode
     unstable_idx = np.argmax(eigvals.real)
     unstable_eigvec = eigvecs[:, unstable_idx]
     unstable_lefteigvec = eigvecs_left[:, unstable_idx]
+
+    print("Right eigenvalue:", eigvals[unstable_idx])
+    print("Biorthogonality:", unstable_lefteigvec.T @ E @ unstable_eigvec)
+
+    # For right eigenvector
+    residual = A @ unstable_eigvec - eigvals[unstable_idx] * (E @ unstable_eigvec)
+    print("Right eigenvector residual norm:", np.linalg.norm(residual))
+
+    # For left eigenvector
+    residual_left = A.T @ unstable_lefteigvec - np.conj(eigvals[unstable_idx]) * (E.T @ unstable_lefteigvec)
+    print("Left eigenvector residual norm:", np.linalg.norm(residual_left))
 
     # Get velocity DOF indices in the mixed space
     V_to_W_vel_mapping = np.load(str(cwd / 'data_output' / 'V_to_W_vel_mapping.npy'))
@@ -232,22 +249,40 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     logger.info("Init time-stepping")
     fs.initialize_time_stepping(ic=None)  # or ic=dolfin.Function(fs.W)
 
-    # 1. Build actuator profile in velocity space
-    def build_gaussian_actuator_profile(V, position, sigma):
-        dof_coords = V.tabulate_dof_coordinates().reshape((-1, V.mesh().geometry().dim()))
-        v_dofs = V.sub(1).dofmap().dofs()  # v-component DOFs
-        profile = np.zeros(V.dim())
-        distances = np.linalg.norm(dof_coords[v_dofs] - position, axis=1)
-        profile[v_dofs] = np.exp(-0.5 * (distances / sigma)**2)
-        # Normalize if needed
-        norm = np.sqrt(profile @ profile)
-        if norm > 0:
-            profile /= norm
-        return profile
+    # 1. Interpolate the actuator expression onto the velocity space
+    actuator_force_1.expression.u_ctrl = 1.0
+    actuator_func_1 = dolfin.interpolate(actuator_force_1.expression, fs.V)
+    actuator_force_2.expression.u_ctrl = 1.0
+    actuator_func_2 = dolfin.interpolate(actuator_force_2.expression, fs.V)
 
-    profile1 = build_gaussian_actuator_profile(fs.V, actuator_force_1.position, actuator_force_1.sigma)
-    profile2 = build_gaussian_actuator_profile(fs.V, actuator_force_2.position, actuator_force_2.sigma)
-    actuator_profile = profile1 + profile2
+    # 2. Assemble the forcing vector (for the velocity block)
+    v = dolfin.TestFunction(fs.V)
+    forcing_form_1 = dolfin.inner(actuator_func_1, v) * dolfin.dx
+    forcing_vec_1 = dolfin.assemble(forcing_form_1)
+    forcing_array_1 = forcing_vec_1.get_local()
+
+    forcing_form_2 = dolfin.inner(actuator_func_2, v) * dolfin.dx
+    forcing_vec_2 = dolfin.assemble(forcing_form_2)
+    forcing_array_2 = forcing_vec_2.get_local()
+
+    actuator_profile = forcing_array_1 + forcing_array_2
+
+    # # 1. Build actuator profile in velocity space
+    # def build_gaussian_actuator_profile(V, position, sigma):
+    #     dof_coords = V.tabulate_dof_coordinates().reshape((-1, V.mesh().geometry().dim()))
+    #     v_dofs = V.sub(1).dofmap().dofs()  # v-component DOFs
+    #     profile = np.zeros(V.dim())
+    #     distances = np.linalg.norm(dof_coords[v_dofs] - position, axis=1)
+    #     profile[v_dofs] = np.exp(-0.5 * (distances / sigma)**2)
+    #     # Normalize if needed
+    #     norm = np.sqrt(profile @ profile)
+    #     if norm > 0:
+    #         profile /= norm
+    #     return profile
+
+    # profile1 = build_gaussian_actuator_profile(fs.V, actuator_force_1.position, actuator_force_1.sigma)
+    # profile2 = build_gaussian_actuator_profile(fs.V, actuator_force_2.position, actuator_force_2.sigma)
+    # actuator_profile = profile1 + profile2
 
     # 2. Project actuator profile onto the unstable mode (real and imaginary parts)
     effectiveness_r = psi_r.T @ E_vel @ actuator_profile
@@ -282,8 +317,8 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
         print("Current perturbation Energy:", fs.compute_energy())
         u_current = fs.fields.u_.vector().get_local()
         # Project using left eigenvectors (biorthogonal projection)
-        z_r = psi_r.T @ E_vel @ u_current / (phi_r.T @ E_vel @ psi_r)
-        z_i = psi_i.T @ E_vel @ u_current / (phi_i.T @ E_vel @ psi_i)
+        z_r = psi_r.T @ E_vel @ u_current
+        z_i = psi_i.T @ E_vel @ u_current
         z = np.array([z_r, z_i])
         u_ctrl = -K @ z
         fs.step(u_ctrl=np.repeat(u_ctrl, repeats=2, axis=0))
