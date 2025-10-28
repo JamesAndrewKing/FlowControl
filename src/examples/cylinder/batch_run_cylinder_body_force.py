@@ -75,7 +75,7 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     )
 
     params_solver = flowsolverparameters.ParamSolver(
-        throw_error=True, is_eq_nonlinear=False, shift=0.0
+        throw_error=True, is_eq_nonlinear=True, shift=0.0
     )
 
     params_mesh = flowsolverparameters.ParamMesh(
@@ -128,7 +128,7 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     # )
 
     params_ic = flowsolverparameters.ParamIC(
-        xloc=2.0, yloc=0.0, radius=0.5, amplitude=0.1
+        xloc=2.0, yloc=0.0, radius=0.5, amplitude=1.0
     )
 
     fs = CylinderFlowSolver(
@@ -241,10 +241,10 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     E_vel = E[V_to_W_vel_mapping, :][:, V_to_W_vel_mapping]
 
     # Split into real and imaginary parts
-    phi_r = np.real(unstable_eigvec_U)
-    phi_i = np.imag(unstable_eigvec_U)
-    psi_r = np.real(unstable_lefteigvec_U)
-    psi_i = np.imag(unstable_lefteigvec_U)
+    phi_r = np.real(unstable_eigvec)
+    phi_i = np.imag(unstable_eigvec)
+    psi_r = np.real(unstable_lefteigvec)
+    psi_i = np.imag(unstable_lefteigvec)
 
     logger.info("Init time-stepping")
     fs.initialize_time_stepping(ic=None)  # or ic=dolfin.Function(fs.W)
@@ -265,31 +265,18 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     forcing_vec_2 = dolfin.assemble(forcing_form_2)
     forcing_array_2 = forcing_vec_2.get_local()
 
-    actuator_profile = forcing_array_1 + forcing_array_2
+    actuator_profile_vels = forcing_array_1 + forcing_array_2
 
-    # # 1. Build actuator profile in velocity space
-    # def build_gaussian_actuator_profile(V, position, sigma):
-    #     dof_coords = V.tabulate_dof_coordinates().reshape((-1, V.mesh().geometry().dim()))
-    #     v_dofs = V.sub(1).dofmap().dofs()  # v-component DOFs
-    #     profile = np.zeros(V.dim())
-    #     distances = np.linalg.norm(dof_coords[v_dofs] - position, axis=1)
-    #     profile[v_dofs] = np.exp(-0.5 * (distances / sigma)**2)
-    #     # Normalize if needed
-    #     norm = np.sqrt(profile @ profile)
-    #     if norm > 0:
-    #         profile /= norm
-    #     return profile
+    actuator_profile = np.zeros(A_shape[0])
+    actuator_profile[V_to_W_vel_mapping] = actuator_profile_vels
 
-    # profile1 = build_gaussian_actuator_profile(fs.V, actuator_force_1.position, actuator_force_1.sigma)
-    # profile2 = build_gaussian_actuator_profile(fs.V, actuator_force_2.position, actuator_force_2.sigma)
-    # actuator_profile = profile1 + profile2
 
     # 2. Project actuator profile onto the unstable mode (real and imaginary parts)
-    effectiveness_r = psi_r.T @ E_vel @ actuator_profile
-    effectiveness_i = psi_i.T @ E_vel @ actuator_profile
+    effectiveness_r = psi_r.T @ E @ actuator_profile
+    effectiveness_i = psi_i.T @ E @ actuator_profile
 
-    norm_psi_r = np.sqrt(psi_r.T @ E_vel @ psi_r)
-    norm_psi_i = np.sqrt(psi_i.T @ E_vel @ psi_i)
+    norm_psi_r = np.sqrt(psi_r.T @ E @ psi_r)
+    norm_psi_i = np.sqrt(psi_i.T @ E @ psi_i)
 
     effectiveness_r_norm = effectiveness_r / norm_psi_r
     effectiveness_i_norm = effectiveness_i / norm_psi_i
@@ -298,30 +285,59 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     print("Normalized actuator effectiveness (imag part):", effectiveness_i_norm)
 
     # Proportional control:
-    # K = np.array([0.06, 0.06])  # Tune gains as needed
+    # K = np.array([0.16, 0.16])  # Tune gains as needed
 
     # LQR Control:
-    lam = eigvals[unstable_idx]
-    A = np.array([[lam.real, -lam.imag],
-                [lam.imag,  lam.real]])
+    # lam = eigvals[unstable_idx]
+    # A = np.array([[lam.real, -lam.imag],
+    #             [lam.imag,  lam.real]])
 
-    # Actuator effectiveness (use unnormalized for actual scaling)
-    B = np.array([[effectiveness_r], [effectiveness_i]])  # shape (2,1)
-    Q = np.eye(2)  # Penalize both z_r and z_i equally
-    R = np.array([[1.0]])  # Penalize control effort
-    P = solve_continuous_are(A, B, Q, R)
-    K = np.linalg.inv(R) @ B.T @ P  # shape (1,2)
-    print("LQR Gain K:", K)
+    # # Actuator effectiveness (use unnormalized for actual scaling)
+    # B = np.array([[effectiveness_r], [effectiveness_i]])  # shape (2,1)
+    # Q = np.eye(2)  # Penalize both z_r and z_i equally
+    # R = np.array([[1.0]])  # Penalize control effort
+    # P = solve_continuous_are(A, B, Q, R)
+    # K = np.linalg.inv(R) @ B.T @ P  # shape (1,2)
+    # print("LQR Gain K:", K)
+
+    # for i in range(fs.params_time.num_steps):
+    #     print("Current perturbation Energy:", fs.compute_energy())
+    #     u_current = fs.fields.up_.vector().get_local()
+    #     # Project using left eigenvectors (biorthogonal projection)
+    #     z_r = psi_r.T @ E @ u_current
+    #     z_i = psi_i.T @ E @ u_current
+    #     z = np.array([z_r, z_i])
+    #     u_ctrl = -K @ z
+    #     fs.step(u_ctrl=np.repeat(u_ctrl, repeats=2, axis=0))
+
+    # Find the most unstable mode
+    unstable_idx = np.argmax(eigvals.real)
+    unstable_eigvec = eigvecs[:, unstable_idx]
+    unstable_lefteigvec = eigvecs_left[:, unstable_idx]
+
+    # Biorthogonal normalization (ensure psi^H E phi = 1)
+    norm_factor = unstable_lefteigvec.conj().T @ E @ unstable_eigvec
+    unstable_lefteigvec = unstable_lefteigvec / norm_factor
+
+    # Actuator profile (already constructed for the full space)
+    # actuator_profile = ... (as in your code)
+
+    # Project actuator profile onto left eigenvector
+    B = unstable_lefteigvec.conj().T @ E @ actuator_profile
+
+    # Choose a negative feedback gain (tune as needed, e.g. -0.1)
+    K = -0.05 / B  # Negative for stabilization
+
+    print("Feedback gain K:", K)
 
     for i in range(fs.params_time.num_steps):
-        print("Current perturbation Energy:", fs.compute_energy())
-        u_current = fs.fields.u_.vector().get_local()
-        # Project using left eigenvectors (biorthogonal projection)
-        z_r = psi_r.T @ E_vel @ u_current
-        z_i = psi_i.T @ E_vel @ u_current
-        z = np.array([z_r, z_i])
-        u_ctrl = -K @ z
+        u_current = fs.fields.up_.vector().get_local()
+        # Project current state onto unstable mode (biorthogonal projection)
+        z = unstable_lefteigvec.conj().T @ E @ u_current
+        # Compute control input (real part if actuator is real-valued)
+        u_ctrl = np.real(K * z)
         fs.step(u_ctrl=np.repeat(u_ctrl, repeats=2, axis=0))
+        print(f"Step {i}, z = {z}, control = {np.real(K * z)}, energy = {fs.compute_energy()}")
 
     ###################### Full Phase Space Control ######################
     # knots = np.linspace(fs.params_time.Tstart, fs.params_time.Tfinal, 10)
@@ -399,7 +415,7 @@ if __name__ == "__main__":
     forcing_amplitude = 0.3
     forcing_frequency = 1.0
 
-    forced_dir = base_dir / f"Re{Re}_body_force_minimal" / "run1"
+    forced_dir = base_dir / f"Re{Re}_body_force_minimal_nonlin" / "run1"
     forced_dir.mkdir(parents=True, exist_ok=True)
 
     run_forced_simulation(Re, forced_dir, num_steps_forced, forcing_amplitude, forcing_frequency)
