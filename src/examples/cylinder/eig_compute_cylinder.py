@@ -116,6 +116,35 @@ def main():
     # exit
     print("Elapsed: %f" % (time.time() - t0))
     print("...............................")
+
+        # --- Eigenpair checks ---
+    print("\n--- Eigenpair checks ---")
+
+    import scipy.sparse as sp
+
+    def petsc_to_numpy_dense(petsc_mat):
+        indptr, indices, data = petsc_mat.getValuesCSR()
+        shape = petsc_mat.getSize()
+        csr = sp.csr_matrix((data, indices, indptr), shape=shape)
+        return csr.toarray()
+
+    A_dense = petsc_to_numpy_dense(AA)
+    B_dense = petsc_to_numpy_dense(BB)
+    n_eigs = V.shape[1]
+
+    # Check right eigenvector residuals
+    for i in range(n_eigs):
+        v = V[:, i]
+        lam = LAMBDA[i]
+        res = np.linalg.norm(A_dense @ v - lam * (B_dense @ v))
+        print(f"Eigenpair {i}: residual = {res:.2e}")
+
+    # Check B-orthogonality (V^H B V)
+    Bmat = V.conj().T @ B_dense @ V
+    print("\nB-orthogonality matrix (real part):")
+    print(np.round(Bmat.real, 3))
+    print("\nB-orthogonality matrix (abs):")
+    print(np.round(np.abs(Bmat), 3))
     return LAMBDA, V
 
 

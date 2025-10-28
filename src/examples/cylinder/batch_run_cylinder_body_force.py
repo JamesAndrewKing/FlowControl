@@ -17,9 +17,9 @@ from examples.cylinder.compute_steady_state import Re
 from flowcontrol.controller import Controller
 from examples.cylinder.batch_run_cylinder import save_data
 import matlab.engine
-eng = matlab.engine.start_matlab()
-eng.cd('/Users/jaking/Desktop/PhD/Cylinder', nargout=0)
-eng.load('lqr_controller_workspace_body_force.mat', nargout=0)
+# eng = matlab.engine.start_matlab()
+# eng.cd('/Users/jaking/Desktop/PhD/Cylinder', nargout=0)
+# eng.load('lqr_controller_workspace_body_force.mat', nargout=0)
 # eng.cd('/Users/jaking/Desktop/PhD/Cylinder/signal code', nargout=0)
 # eng.load('ssm_controller_workspace_body_force.mat', nargout=0)
 
@@ -224,7 +224,7 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     unstable_lefteigvec = eigvecs_left[:, unstable_idx]
 
     print("Right eigenvalue:", eigvals[unstable_idx])
-    print("Biorthogonality:", unstable_lefteigvec.T @ E @ unstable_eigvec)
+    print("Biorthogonality:", unstable_lefteigvec.conj().T @ E @ unstable_eigvec)
 
     # For right eigenvector
     residual = A @ unstable_eigvec - eigvals[unstable_idx] * (E @ unstable_eigvec)
@@ -392,7 +392,7 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     save_data(fs, save_dir, cwd, logger)
 
 if __name__ == "__main__":
-    base_dir = Path("/Users/jaking/Desktop/PhD/cylinder")
+    base_dir = Path("/Users/james/Desktop/PhD/cylinder")
     base_dir.mkdir(parents=True, exist_ok=True)
 
     num_steps_forced = 20000

@@ -112,9 +112,11 @@ omega_list = [omega_list1, omega_list2];
 % disp(['Largest real part eigenvalue: ', num2str(all_lambda(idx_max))]);
 % save('slow_eigenvector.mat', 'found_vec');
 % --- Collect all right and left eigenpairs first ---
+% filepath: your_script.m
 right_eigs = []; % struct array: .lambda, .vec
 left_eigs  = []; % struct array: .lambda, .vec
 
+% --- Step 1: Compute right eigenpairs for each omega in omega_list ---
 for omega = omega_list
     target = omega;
     try
@@ -124,39 +126,47 @@ for omega = omega_list
             right_eigs(end+1).lambda = lambda(j);
             right_eigs(end).vec = vecs(:, j);
         end
-
-        [lvecs, lvals] = eigs(A', E', neig, target, opts);
-        llambda = diag(lvals);
-        for j = 1:length(llambda)
-            left_eigs(end+1).lambda = llambda(j);
-            left_eigs(end).vec = lvecs(:, j);
-        end
     catch ME
-        warning('eigs failed for omega = %f + %fi\n%s', real(target), imag(target), ME.message);
+        warning('Right eigs failed for omega = %f + %fi\n%s', real(target), imag(target), ME.message);
+    end
+end
+
+% --- Step 2: For each right eigenvalue, compute the corresponding left eigenvector ---
+for i = 1:length(right_eigs)
+    target = conj(right_eigs(i).lambda); % Use conjugate as target for left eigenproblem
+    try
+        [lvecs, lvals] = eigs(A', E', 1, target, opts); % Only need 1 eigenpair per target
+        left_eigs(i).lambda = diag(lvals);
+        left_eigs(i).vec = lvecs;
+    catch ME
+        warning('Left eigs failed for target = %f + %fi\n%s', real(target), imag(target), ME.message);
+        left_eigs(i).lambda = NaN;
+        left_eigs(i).vec = NaN;
     end
 end
 
 %%
 
-% --- Now match right and left eigenpairs ---
+% --- Now match right and left eigenpairs directly by construction ---
 eig_data = [];
-used_left = false(1, length(left_eigs)); % Track which left eigenvectors have been matched
-tol = 1e-4;  % Start with a moderate tolerance
+tol = 1e-8;  % Tolerance for duplicate removal
+match_tol = 1e-6; % Tolerance for matching left/right eigenvalues
 
+used_left = false(1, length(left_eigs));
 for i = 1:length(right_eigs)
     % Find left eigenvalue closest to conj(right eigenvalue)
-    diffs = abs([left_eigs.lambda] - right_eigs(i).lambda);
+    diffs = abs([left_eigs.lambda] - conj(right_eigs(i).lambda));
     diffs(used_left) = Inf; % Don't match already used left eigenvectors
     [min_dist, idx_left] = min(diffs);
-    if min_dist < tol
+    if min_dist < match_tol && ~isnan(left_eigs(idx_left).lambda)
         eig_data(end+1).lambda = right_eigs(i).lambda;
         eig_data(end).vec = right_eigs(i).vec;
-        eig_data(end).lvec = conj(left_eigs(idx_left).vec);
-        used_left(idx_left) = true; % Mark this left eigenvector as used
+        eig_data(end).lvec = left_eigs(idx_left).vec;
+        used_left(idx_left) = true;
     end
 end
 
-% --- Remove duplicates by eigenvalue (within tol) ---
+% Remove duplicates by eigenvalue (within tol)
 unique_idx = true(1, length(eig_data));
 for i = 1:length(eig_data)
     for j = i+1:length(eig_data)
@@ -167,9 +177,16 @@ for i = 1:length(eig_data)
 end
 eig_data = eig_data(unique_idx);
 
-% --- Sort eig_data by real part of eigenvalues (descending) ---
+% Sort eig_data by real part of eigenvalues (descending)
 [~, sort_idx] = sort(real([eig_data.lambda]), 'descend');
 eig_data = eig_data(sort_idx);
+
+% Normalize eigenvectors and biorthogonalize
+for k = 1:length(eig_data)
+    eig_data(k).vec = eig_data(k).vec / norm(eig_data(k).vec);
+    norm_factor = eig_data(k).lvec' * E * eig_data(k).vec;
+    eig_data(k).lvec = eig_data(k).lvec / conj(norm_factor);
+end
 
 % --- Now all outputs are in sorted order ---
 % Display the top eigenvalue
@@ -185,7 +202,7 @@ res_right = norm(A * found_vec - top_eig.lambda * (E * found_vec));
 disp(['Right eigenvector residual norm: ', num2str(res_right)]);
 
 % Check left eigenvector residual: A'*psi - conj(lambda)*E'*psi
-res_left = norm(A' * found_lvec - conj(top_eig.lambda) * (E' * found_lvec));
+res_left = norm(found_lvec' * A - top_eig.lambda * (found_lvec' * E));
 disp(['Left eigenvector residual norm: ', num2str(res_left)]);
 
 % Check biorthogonality: psi^H * E * phi
