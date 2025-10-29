@@ -135,6 +135,13 @@ def solve_linearized_steady_state(fs, U0_base, u_ctrl, max_iter=50, tol=1e-8):
     if res_norm > 1e-6:
         logger.warning(f"Large residual norm {res_norm:.2e} - solution may not be accurate")
     
+    for bc in bcu:
+        boundary_dofs = bc.get_boundary_values().keys()
+        prescribed_values = bc.get_boundary_values().values()
+        solution_values = up_perturbation.vector().get_local()[list(boundary_dofs)]
+        error = np.abs(solution_values - list(prescribed_values))
+        print(f"Max boundary error for this BC: {np.max(error)}")
+
     return up_perturbation
 
 def main():
@@ -288,7 +295,6 @@ def main():
     np.save(cwd / "data_output" / "U_lin_field_data_unit_control.npy", U_lin_field_data)
     np.save(cwd / "data_output" / "P_lin_field_data_unit_control.npy", P_lin_field_data)
     np.save(cwd / "data_output" / "UP_lin_field_data_unit_control.npy", UP_lin_field_data)
-
 
 if __name__ == "__main__":
     main()
