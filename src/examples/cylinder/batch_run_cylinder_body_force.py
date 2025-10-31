@@ -218,77 +218,50 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     A_shape = tuple(mat_A['A_shape'].flatten())
     A = csr_matrix((A_data, A_indices, A_indptr), shape=A_shape)
 
-    # Find the most unstable mode
+    # --- Find the most unstable mode ---
     unstable_idx = np.argmax(eigvals.real)
-    unstable_eigvec = eigvecs[:, unstable_idx]
-    unstable_lefteigvec = eigvecs_left[:, unstable_idx]
+    phi_raw = eigvecs[:, unstable_idx]       # right eigenvector
+    psi_raw = eigvecs_left[:, unstable_idx]  # left eigenvector
+    lam = eigvals[unstable_idx]
 
-    print("Right eigenvalue:", eigvals[unstable_idx])
-    print("Biorthogonality:", unstable_lefteigvec.conj().T @ E @ unstable_eigvec)
+    # --- E-norm normalization and biorthogonal scaling ---
+    phi = phi_raw / np.sqrt(np.dot(phi_raw.conj(), E.dot(phi_raw)))  # ||phi||_E = 1
+    psi = psi_raw / np.dot(psi_raw.conj(), E.dot(phi))               # psi^H E phi = 1
 
-    # For right eigenvector
-    residual = A @ unstable_eigvec - eigvals[unstable_idx] * (E @ unstable_eigvec)
-    print("Right eigenvector residual norm:", np.linalg.norm(residual))
-
-    # For left eigenvector
-    residual_left = A.T @ unstable_lefteigvec - np.conj(eigvals[unstable_idx]) * (E.T @ unstable_lefteigvec)
-    print("Left eigenvector residual norm:", np.linalg.norm(residual_left))
-
-    # Get velocity DOF indices in the mixed space
+    # --- Velocity DOF mapping ---
     V_to_W_vel_mapping = np.load(str(cwd / 'data_output' / 'V_to_W_vel_mapping.npy'))
-    unstable_eigvec_U = unstable_eigvec[V_to_W_vel_mapping]
-    unstable_lefteigvec_U = unstable_lefteigvec[V_to_W_vel_mapping]
-    E_vel = E[V_to_W_vel_mapping, :][:, V_to_W_vel_mapping]
 
-    logger.info("Init time-stepping")
-    fs.initialize_time_stepping(ic=None)  # or ic=dolfin.Function(fs.W)
-
-    # 1. Interpolate the actuator expression onto the velocity space
+    # --- Assemble actuator forcing vector in mixed space ---
+    fs.initialize_time_stepping(ic=None)
     actuator_force_1.expression.u_ctrl = 1.0
     actuator_func_1 = dolfin.interpolate(actuator_force_1.expression, fs.V)
-    # actuator_force_2.expression.u_ctrl = 1.0
-    # actuator_func_2 = dolfin.interpolate(actuator_force_2.expression, fs.V)
 
-    # 2. Assemble the forcing vector (for the velocity block)
     v = dolfin.TestFunction(fs.V)
-    forcing_form_1 = dolfin.inner(actuator_func_1, v) * dolfin.dx
-    forcing_vec_1 = dolfin.assemble(forcing_form_1)
-    forcing_array_1 = forcing_vec_1.get_local()
-
-    # forcing_form_2 = dolfin.inner(actuator_func_2, v) * dolfin.dx
-    # forcing_vec_2 = dolfin.assemble(forcing_form_2)
-    # forcing_array_2 = forcing_vec_2.get_local()
-
-    actuator_profile_vels = forcing_array_1 #+ forcing_array_2
+    forcing_vec_1 = dolfin.assemble(dolfin.inner(actuator_func_1, v) * dolfin.dx)
+    actuator_profile_vels = forcing_vec_1.get_local()
 
     actuator_profile = np.zeros(A_shape[0])
     actuator_profile[V_to_W_vel_mapping] = actuator_profile_vels
 
-    # Find the most unstable mode
-    unstable_idx = np.argmax(eigvals.real)
-    unstable_eigvec = eigvecs[:, unstable_idx]
-    unstable_lefteigvec = eigvecs_left[:, unstable_idx]
+    # --- Compute coupling scalar B correctly ---
+    B = np.dot(psi.conj(), actuator_profile)  # psi^H b
+    print("Actuator coupling B:", B)
 
-    # Biorthogonal normalization (ensure psi^H E phi = 1)
-    norm_factor = unstable_lefteigvec.conj().T @ E @ unstable_eigvec
-    unstable_lefteigvec = unstable_lefteigvec / norm_factor
-
-    # Project actuator profile onto left eigenvector
-    B = unstable_lefteigvec.conj().T @ E @ actuator_profile
-
-    # Choose a negative feedback gain (tune as needed, e.g. -0.1)
-    K = -0.05 / B  # Negative for stabilization
-
+    # --- Feedback gain: place closed-loop eigenvalue ---
+    sigma_target = 0.05  # desired decay
+    if abs(B.real) > 1e-12:
+        K = -(lam.real + sigma_target) / B.real
+    else:
+        K = -np.real((lam + sigma_target) / B)  # fallback
     print("Feedback gain K:", K)
 
+    # --- Time-stepping loop ---
     for i in range(fs.params_time.num_steps):
         u_current = fs.fields.up_.vector().get_local()
-        # Project current state onto unstable mode (biorthogonal projection)
-        z = unstable_lefteigvec.conj().T @ E @ u_current
-        # Compute control input (real part if actuator is real-valued)
-        u_ctrl = np.real(K * z)
+        z = np.dot(psi.conj(), E.dot(u_current))  # modal amplitude
+        u_ctrl = np.real(K * z)                     # control input
         fs.step(u_ctrl=np.array([u_ctrl, 0]))
-        print(f"Step {i}, z = {z}, control = {np.real(K * z)}, energy = {fs.compute_energy()}")
+        print(f"Step {i}, z = {z}, control = {u_ctrl}, energy = {fs.compute_energy()}")
 
     ###################### Full Phase Space Control ######################
     # knots = np.linspace(fs.params_time.Tstart, fs.params_time.Tfinal, 10)
@@ -366,7 +339,7 @@ if __name__ == "__main__":
     forcing_amplitude = 0.3
     forcing_frequency = 1.0
 
-    forced_dir = base_dir / f"Re{Re}_body_force_minimal_nonlin_one_act" / "run1"
+    forced_dir = base_dir / f"Re{Re}_body_force_minimal_nonlin_one_act_no_E" / "run1"
     forced_dir.mkdir(parents=True, exist_ok=True)
 
     run_forced_simulation(Re, forced_dir, num_steps_forced, forcing_amplitude, forcing_frequency)
