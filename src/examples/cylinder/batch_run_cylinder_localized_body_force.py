@@ -88,17 +88,23 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     params_restart = flowsolverparameters.ParamRestart(
     )
 
-    actuator_force_1 = ActuatorForceGaussianV(
-        sigma=0.6, position=np.array([2.5, 0.0])
-    )
-    actuator_force_2 = ActuatorForceGaussianV(
-        sigma=0.6, position=np.array([1.5, 0.0])
-    )
     # actuator_force_1 = ActuatorForceGaussianV(
-    #     sigma=0.5, position=np.array([0.0, 0.5])
+    #     sigma=0.6, position=np.array([2.5, 0.0])
     # )
     # actuator_force_2 = ActuatorForceGaussianV(
-    #     sigma=0.5, position=np.array([1.0, -0.5])
+    #     sigma=0.6, position=np.array([1.5, 0.0])
+    # )
+    actuator_force_1 = ActuatorForceGaussianV(
+        sigma=0.1, position=np.array([0.0, 0.5])
+    )
+    actuator_force_2 = ActuatorForceGaussianV(
+        sigma=0.1, position=np.array([0.0, -0.5])
+    )
+    # actuator_force_1 = ActuatorForceGaussianV(
+    #     sigma=2.5, position=np.array([0.3, np.sqrt(0.5**2 - 0.3**2)])
+    # )
+    # actuator_force_2 = ActuatorForceGaussianV(
+    #     sigma=2.5, position=np.array([0.3, -np.sqrt(0.5**2 - 0.3**2)])
     # )
 
     # duplicate actuators (1 top, 1 bottom) but assign same control input to each
@@ -148,6 +154,8 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     sensor_position = np.array([3.0, 0.0])
     dof_index = find_sensor_dof_index(V, sensor_position)
     print("Sensor DoF index:", dof_index)
+    C = np.zeros(A_shape[0])
+    C[V_to_W_vel_mapping[dof_index]] = 1.0
 
     # dof_indices_1 = find_actuator_dof_indices(fs.V, np.array([0.0, 0.5]), 0.1)
     # dof_indices_2 = find_actuator_dof_indices(fs.V, np.array([0.0, -0.5]), 0.1)
@@ -233,29 +241,32 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
 
     # --- Assemble actuator forcing vector in mixed space ---
     fs.initialize_time_stepping(ic=None)
+    v = dolfin.TestFunction(fs.V)
     actuator_force_1.expression.u_ctrl = 1.0
     actuator_func_1 = dolfin.interpolate(actuator_force_1.expression, fs.V)
-
-    v = dolfin.TestFunction(fs.V)
     forcing_vec_1 = dolfin.assemble(dolfin.inner(actuator_func_1, v) * dolfin.dx)
-    actuator_profile_vels = forcing_vec_1.get_local()
+    actuator_profile_vels_1 = forcing_vec_1.get_local()
+    actuator_force_2.expression.u_ctrl = 1.0
+    actuator_func_2 = dolfin.interpolate(actuator_force_2.expression, fs.V)
+    forcing_vec_2 = dolfin.assemble(dolfin.inner(actuator_func_2, v) * dolfin.dx)
+    actuator_profile_vels_2 = forcing_vec_2.get_local()
 
-    actuator_profile = np.zeros(A_shape[0])
-    actuator_profile[V_to_W_vel_mapping] = actuator_profile_vels
+    B = np.zeros(A_shape[0])
+    B[V_to_W_vel_mapping] = actuator_profile_vels_1 + actuator_profile_vels_2
 
     # --- Compute coupling scalar B correctly ---
-    B = np.dot(psi.conj(), actuator_profile)  # psi^H b
-    print("Actuator coupling B:", B)
+    B_hat = np.dot(psi.conj(), B)  # psi^H b
+    print("Actuator coupling B:", B_hat)
 
-    B_norm = np.dot(psi.conj(), actuator_profile/np.linalg.norm(actuator_profile))  # psi^H b
+    B_norm = np.dot(psi.conj(), B/np.linalg.norm(B))  # psi^H b
     print("Normalized Actuator coupling B:", B_norm)
 
     # --- Feedback gain: place closed-loop eigenvalue ---
-    sigma_target = 0.05  # desired decay
-    if abs(B.real) > 1e-12:
-        K = -(lam.real + sigma_target) / B.real
+    sigma_target = 0.001  # desired decay
+    if abs(B_hat.real) > 1e-12:
+        K = -(lam.real + sigma_target) / B_hat.real
     else:
-        K = -np.real((lam + sigma_target) / B)  # fallback
+        K = -np.real((lam + sigma_target) / B_hat)  # fallback
     print("Feedback gain K:", K)
 
     # --- Time-stepping loop ---
@@ -263,7 +274,7 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
         u_current = fs.fields.up_.vector().get_local()
         z = np.dot(psi.conj(), E.dot(u_current))  # modal amplitude
         u_ctrl = np.real(K * z)                     # control input
-        fs.step(u_ctrl=np.array([u_ctrl, 0]))
+        fs.step(u_ctrl=np.array([u_ctrl, u_ctrl]))
         print(f"Step {i}, z = {z}, control = {u_ctrl}, energy = {fs.compute_energy()}")
 
     ###################### Full Phase Space Control ######################
@@ -342,7 +353,7 @@ if __name__ == "__main__":
     forcing_amplitude = 0.3
     forcing_frequency = 1.0
 
-    forced_dir = base_dir / f"Re{Re}_body_force_minimal_nonlin_one_act_no_E_debug" / "run1"
+    forced_dir = base_dir / f"Re{Re}_localized_body_force_nonlin_debug" / "run1"
     forced_dir.mkdir(parents=True, exist_ok=True)
 
     run_forced_simulation(Re, forced_dir, num_steps_forced, forcing_amplitude, forcing_frequency)

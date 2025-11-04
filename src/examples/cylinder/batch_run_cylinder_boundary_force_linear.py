@@ -75,7 +75,7 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     )
 
     params_solver = flowsolverparameters.ParamSolver(
-        throw_error=True, is_eq_nonlinear=False, shift=0.0
+        throw_error=True, is_eq_nonlinear=True, shift=0.0
     )
 
     params_mesh = flowsolverparameters.ParamMesh(
@@ -250,8 +250,12 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
 
     # Find the most unstable mode
     unstable_idx = np.argmax(eigvals.real)
-    phi = eigvecs[:, unstable_idx]           # Right eigenvector (complex)
-    psi = eigvecs_left[:, unstable_idx]      # Left eigenvector (complex)
+    phi_raw = eigvecs[:, unstable_idx]           # Right eigenvector (complex)
+    psi_raw = eigvecs_left[:, unstable_idx]      # Left eigenvector (complex)
+
+    # --- E-norm normalization and biorthogonal scaling ---s
+    phi = phi_raw / np.sqrt(np.dot(phi_raw.conj(), E.dot(phi_raw)))  # ||phi||_E = 1
+    psi = psi_raw / np.dot(psi_raw.conj(), E.dot(phi))   
 
     # Split into real and imaginary parts
     phi_r = np.real(phi)
@@ -274,6 +278,9 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     print("A_hat (reduced system matrix):\n", A_hat)
     print("C_hat (reduced control matrix):\n", C_hat)
 
+    # eigval = eigvals[unstable_idx]
+    # err = A @ V - E @ V @ np.array([[eigval.real, eigval.imag], [-eigval.imag,eigval.real]])
+
     # Feedback gains (tune as needed)
     k_r = -0.05 / C_hat[0]
     k_i = -0.05 / C_hat[1]
@@ -284,6 +291,9 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
 
     logger.info("Init time-stepping")
     fs.initialize_time_stepping(ic=None)
+
+    B_norm = np.dot(psi.conj(), E@C/np.linalg.norm(E@C))  # psi^H b
+    print("Normalized Actuator coupling B:", B_norm)
 
     for i in range(fs.params_time.num_steps):
         up_current = fs.fields.up_.vector().get_local()
@@ -301,10 +311,10 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
         if i == 0:
             u_ctrl_new = u_ctrl + params_time.dt * u_ctrl_dot
         else:
-            u_ctrl_new = u_ctrl + 0.5 * params_time.dt * (3 * u_ctrl_dot - u_ctrl_dot_prev)
+            u_ctrl_new = u_ctrl + 0.5 * params_time.dt * (u_ctrl_dot + u_ctrl_dot_prev)
 
         fs.step(u_ctrl=[float(u_ctrl_new)] * 2)
-        print(f"Step {i}, z_r = {z_r}, z_i = {z_i}, control = {u_ctrl_dot}, energy = {fs.compute_energy()}")
+        print(f"Step {i}, z_r = {z_r}, z_i = {z_i}, control = {u_ctrl_new}, energy = {fs.compute_energy()}")
 
         u_ctrl = u_ctrl_new
         u_ctrl_dot_prev = u_ctrl_dot
@@ -385,7 +395,7 @@ if __name__ == "__main__":
     forcing_amplitude = 0.3
     forcing_frequency = 1.0
 
-    forced_dir = base_dir / f"Re{Re}_body_force_minimal_boundary_nonlin" / "run1"
+    forced_dir = base_dir / f"Re{Re}_boundary_force_nonlin_debug" / "run1"
     forced_dir.mkdir(parents=True, exist_ok=True)
 
     run_forced_simulation(Re, forced_dir, num_steps_forced, forcing_amplitude, forcing_frequency)
