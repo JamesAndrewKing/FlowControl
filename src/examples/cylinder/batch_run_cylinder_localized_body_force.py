@@ -88,23 +88,17 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     params_restart = flowsolverparameters.ParamRestart(
     )
 
-    # actuator_force_1 = ActuatorForceGaussianV(
-    #     sigma=0.6, position=np.array([2.5, 0.0])
-    # )
-    # actuator_force_2 = ActuatorForceGaussianV(
-    #     sigma=0.6, position=np.array([1.5, 0.0])
-    # )
     actuator_force_1 = ActuatorForceGaussianV(
-        sigma=0.1, position=np.array([0.0, 0.5])
+        sigma=0.6, position=np.array([2.5, 0.0])
     )
     actuator_force_2 = ActuatorForceGaussianV(
-        sigma=0.1, position=np.array([0.0, -0.5])
+        sigma=0.6, position=np.array([1.5, 0.0])
     )
     # actuator_force_1 = ActuatorForceGaussianV(
-    #     sigma=2.5, position=np.array([0.3, np.sqrt(0.5**2 - 0.3**2)])
+    #     sigma=0.1, position=np.array([0.0, 0.5])
     # )
     # actuator_force_2 = ActuatorForceGaussianV(
-    #     sigma=2.5, position=np.array([0.3, -np.sqrt(0.5**2 - 0.3**2)])
+    #     sigma=0.1, position=np.array([0.0, -0.5])
     # )
 
     # duplicate actuators (1 top, 1 bottom) but assign same control input to each
@@ -154,8 +148,8 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     sensor_position = np.array([3.0, 0.0])
     dof_index = find_sensor_dof_index(V, sensor_position)
     print("Sensor DoF index:", dof_index)
-    C = np.zeros(A_shape[0])
-    C[V_to_W_vel_mapping[dof_index]] = 1.0
+    # C = np.zeros(A_shape[0])
+    # C[V_to_W_vel_mapping[dof_index]] = 1.0
 
     # dof_indices_1 = find_actuator_dof_indices(fs.V, np.array([0.0, 0.5]), 0.1)
     # dof_indices_2 = find_actuator_dof_indices(fs.V, np.array([0.0, -0.5]), 0.1)
@@ -252,7 +246,7 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     actuator_profile_vels_2 = forcing_vec_2.get_local()
 
     B = np.zeros(A_shape[0])
-    B[V_to_W_vel_mapping] = actuator_profile_vels_1 + actuator_profile_vels_2
+    B[V_to_W_vel_mapping] = actuator_profile_vels_1
 
     # --- Compute coupling scalar B correctly ---
     B_hat = np.dot(psi.conj(), B)  # psi^H b
@@ -269,12 +263,15 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
         K = -np.real((lam + sigma_target) / B_hat)  # fallback
     print("Feedback gain K:", K)
 
+    K = 10.0
     # --- Time-stepping loop ---
     for i in range(fs.params_time.num_steps):
+        y_meas = flu.MpiUtils.mpi_broadcast(fs.y_meas)
         u_current = fs.fields.up_.vector().get_local()
         z = np.dot(psi.conj(), E.dot(u_current))  # modal amplitude
-        u_ctrl = np.real(K * z)                     # control input
-        fs.step(u_ctrl=np.array([u_ctrl, u_ctrl]))
+        # u_ctrl = np.real(K * z)                     # control input
+        u_ctrl = -K*y_meas[0]
+        fs.step(u_ctrl=np.array([u_ctrl, 0]))
         print(f"Step {i}, z = {z}, control = {u_ctrl}, energy = {fs.compute_energy()}")
 
     ###################### Full Phase Space Control ######################
@@ -353,7 +350,7 @@ if __name__ == "__main__":
     forcing_amplitude = 0.3
     forcing_frequency = 1.0
 
-    forced_dir = base_dir / f"Re{Re}_localized_body_force_nonlin_debug" / "run1"
+    forced_dir = base_dir / f"Re{Re}_body_force_sensor_higher_gain" / "run1"
     forced_dir.mkdir(parents=True, exist_ok=True)
 
     run_forced_simulation(Re, forced_dir, num_steps_forced, forcing_amplitude, forcing_frequency)
