@@ -77,7 +77,7 @@ def load_eigendata(mat_file_path, num_eigenvectors=1):
     
     return eigenvalues_selected, eigenvectors_matrix
 
-def run_lidcavity_with_eigenvector_ic(Re, phase_angle, eigenvector_amplitude, forcing_frequency, forcing_amplitude, save_dir, num_steps=100):
+def run_lidcavity_with_eigenvector_ic(Re, eigenvector_coefficients, forcing_frequency, forcing_amplitude, save_dir, num_steps=100):
     """Run lid cavity with eigenvector-based initial condition"""
     import logging
     import time
@@ -148,25 +148,27 @@ def run_lidcavity_with_eigenvector_ic(Re, phase_angle, eigenvector_amplitude, fo
 
     # Load eigendata and create eigenvector IC
     logger.info("Loading eigendata...")
-    eigenvalue, eigenvector = load_eigendata(cwd / "data_output" / "eig_data.mat", num_eigenvectors=1)
+    eigenvalues, eigenvectors = load_eigendata(cwd / "data_output" / "eig_data.mat", num_eigenvectors=2)
     logger.info("Eigendata loading successful")
 
-    eigenvector_real_part = np.real(eigenvector)
-    eigenvector_imag_part = np.imag(eigenvector)
+    # Build the 4D real basis, ordered as [real1, imag1, real2, imag2]
+    num_dofs = eigenvectors.shape[0]
+    basis_matrix = np.zeros((num_dofs, 4))
+    basis_matrix[:, 0::2] = np.real(eigenvectors)  # Even columns (0, 2) are real parts
+    basis_matrix[:, 1::2] = np.imag(eigenvectors)  # Odd columns (1, 3) are imag parts
 
-    perturbation_vector = (np.cos(phase_angle) * eigenvector_real_part + 
-                          np.sin(phase_angle) * eigenvector_imag_part)
+    perturbation_vector = np.dot(basis_matrix, eigenvector_coefficients)
 
     # Create eigenvector IC
     logger.info("Creating eigenvector-based initial condition...")
         
-    if len(eigenvector) == fs.W.dim():
+    if len(perturbation_vector) == fs.W.dim():
         # Mixed space eigenvector
         logger.info("Processing mixed-space eigenvector (real part)")
-        UP_pert_vec = eigenvector_amplitude * perturbation_vector
+        UP_pert_vec = perturbation_vector
         
     else:
-        raise ValueError(f"Eigenvector size {len(eigenvector)} doesn't match W ({fs.W.dim()})")
+        raise ValueError(f"Eigenvector size {len(perturbation_vector)} doesn't match W ({fs.W.dim()})")
 
     logger.info("Creating steady state + perturbation IC...")
     UP_ic = dolfin.Function(fs.W)
@@ -184,10 +186,11 @@ def run_lidcavity_with_eigenvector_ic(Re, phase_angle, eigenvector_amplitude, fo
         y_meas = flu.MpiUtils.mpi_broadcast(fs.y_meas)
         # This is still for unforced simulations
         # TODO: Add forcing to the workflow
-        if fs.t < 100:
-            u_ctrl = [0 * y_meas[0]]
-        else:
-            u_ctrl = [forcing_amplitude * np.sin(forcing_frequency * fs.t) + 0 * y_meas[0]]
+        u_ctrl = [forcing_amplitude * np.sin(forcing_frequency * fs.t) + 0 * y_meas[0]]
+        # if fs.t < 100:
+        #     u_ctrl = [0 * y_meas[0]]
+        # else:
+        #     u_ctrl = [forcing_amplitude * np.sin(forcing_frequency * fs.t) + 0 * y_meas[0]]
         
         fs.step(u_ctrl=[u_ctrl[0]])
 
@@ -736,22 +739,61 @@ def run_lidcavity_with_eigenvector_ic(Re, phase_angle, eigenvector_amplitude, fo
 if __name__ == "__main__":
     # Adapt to wherever you want to save the results
     base_dir = Path("/Users/jaking/Desktop/PhD/lid_driven_cavity")
-    parent_dir = base_dir / f"Re{Re}_forced"
+    parent_dir = base_dir / f"Re{Re}_testing_eigvector_ics"
     parent_dir.mkdir(parents=True, exist_ok=True)
+    num_steps = 1000
+    # 1. Forcing parameters
+    forcing_frequencies = [0.0]  # e.g., [0.0] for no forcing
+    forcing_amplitudes = [0.0] # e.g., [0.0] for no forcing
 
-    phase_angles = np.linspace(0,2*np.pi, 1)
-    amplitudes = [0.005]  # Different perturbation amplitudes
-    num_steps = 10000
-    count = 1
-    for phase_angle in phase_angles:
-        for amp in amplitudes:
-            save_dir = parent_dir / f"run{count}"
-            save_dir.mkdir(parents=True, exist_ok=True)
+    # 2. Initial condition parameters
+    ic_amp = 0.005 # The norm of the initial perturbation coefficients
+    coefficient_directions = [
+        [1, 1, 1, 1],      # Combination of all modes
+    ]
 
-            print(f"Running simulation {count} with angle {phase_angle}, amplitude {amp}")
-            print(f"  -> Save directory: {save_dir}")
-            
-            run_lidcavity_with_eigenvector_ic(Re, phase_angle, amp, 1, 0.01, save_dir, num_steps)
-            
-            print(f"Finished simulation {count}")
-            count += 1
+    # --- Pre-calculate all normalized coefficient sets (Corrected version) ---
+    normalized_coefficient_sets = []
+    for d in coefficient_directions:
+        direction_vec = np.array(d, dtype=float)
+        norm = np.linalg.norm(direction_vec)
+        
+        if norm > 1e-10:
+            # Normalize the direction and scale by the desired amplitude
+            normalized_coeffs = (ic_amp * direction_vec / norm).tolist()
+        else:
+            normalized_coeffs = d # It's a zero vector
+        
+        normalized_coefficient_sets.append(normalized_coeffs)
+    
+    print("--- Initial Condition Coefficient Sets ---")
+    for i, coeffs in enumerate(normalized_coefficient_sets):
+        print(f"Set {i+1}: {coeffs} (Norm: {np.linalg.norm(coeffs):.4f})")
+    print("----------------------------------------")
+
+    # --- Main simulation loop ---
+    run_count = 1
+    for freq in forcing_frequencies:
+        for f_amp in forcing_amplitudes:
+            for i, coeffs in enumerate(normalized_coefficient_sets):
+                # Create a unique, flat save directory for each run: "run_i"
+                save_dir = parent_dir / f"run{run_count}"
+                save_dir.mkdir(parents=True, exist_ok=True)
+
+                print(f"\n--- Running simulation {run_count} ---")
+                print(f"  Forcing Freq: {freq}, Forcing Amp: {f_amp}")
+                print(f"  IC Coefficients: {coeffs}")
+                print(f"  Save directory: {save_dir}")
+                
+                # Call the function with the correct parameter name
+                run_lidcavity_with_eigenvector_ic(
+                    Re=Re, 
+                    eigenvector_coefficients=coeffs, 
+                    forcing_frequency=freq, 
+                    forcing_amplitude=f_amp, 
+                    save_dir=save_dir, 
+                    num_steps=num_steps
+                )
+                
+                print(f"--- Finished simulation {run_count} ---")
+                run_count += 1

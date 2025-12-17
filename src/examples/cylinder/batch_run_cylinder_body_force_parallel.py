@@ -21,7 +21,7 @@ def run_single_simulation(args):
 
 if __name__ == "__main__":
     base_dir = Path("/Users/jaking/Desktop/PhD/cylinder")
-    parent_dir = base_dir / f"Re{Re}_body_force_spline_full"
+    parent_dir = base_dir / f"Re{Re}_volume_body_force_sine"
     parent_dir.mkdir(parents=True, exist_ok=True)
 
     # forcing_frequencies = [0.5, 0.77, 1.0, 1.3] # In rad/s
