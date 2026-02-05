@@ -17,7 +17,10 @@ from examples.cylinder.compute_steady_state import Re
 from flowcontrol.controller import Controller
 from examples.cylinder.batch_run_cylinder import save_data
 import matlab.engine
-# eng = matlab.engine.start_matlab()
+eng = matlab.engine.start_matlab()
+eng.cd('/Users/jaking/Desktop/PhD/Cylinder', nargout=0)
+eng.load('mpc_controller_workspace.mat', nargout=0)
+
 # eng.cd('/Users/jaking/Desktop/PhD/Cylinder', nargout=0)
 # eng.load('lqr_controller_workspace_body_force.mat', nargout=0)
 # eng.cd('/Users/jaking/Desktop/PhD/Cylinder/signal code', nargout=0)
@@ -200,129 +203,131 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     #     fs.step(u_ctrl=np.repeat(u_ctrl, repeats=2, axis=0))
 
     # Load eigenvalues and eigenvectors
-    mat = loadmat(str(cwd / 'data_output' / 'eig_data.mat'))
-    eig_data = mat['eig_data']
-    eigvals = np.array([eig_data[0, i]['lambda'][0, 0] for i in range(eig_data.shape[1])])
-    eigvecs = np.array([eig_data[0, i]['vec'].flatten() for i in range(eig_data.shape[1])]).T
-    eigvecs_left = np.array([eig_data[0, i]['lvec'].flatten() for i in range(eig_data.shape[1])]).T
-    mat_E = loadmat(str(cwd / 'data_output' / 'operators' / 'E_sparse.mat'))
-    E_data = mat_E['E_data'].flatten()
-    E_indices = mat_E['E_indices'].flatten()
-    E_indptr = mat_E['E_indptr'].flatten()
-    E_shape = tuple(mat_E['E_shape'].flatten())
-    E = csr_matrix((E_data, E_indices, E_indptr), shape=E_shape)
-    mat_A = loadmat(str(cwd / 'data_output' / 'operators' / 'A_sparse.mat'))
-    A_data = mat_A['A_data'].flatten()
-    A_indices = mat_A['A_indices'].flatten()
-    A_indptr = mat_A['A_indptr'].flatten()
-    A_shape = tuple(mat_A['A_shape'].flatten())
-    A = csr_matrix((A_data, A_indices, A_indptr), shape=A_shape)
+    # mat = loadmat(str(cwd / 'data_output' / 'eig_data.mat'))
+    # eig_data = mat['eig_data']
+    # eigvals = np.array([eig_data[0, i]['lambda'][0, 0] for i in range(eig_data.shape[1])])
+    # eigvecs = np.array([eig_data[0, i]['vec'].flatten() for i in range(eig_data.shape[1])]).T
+    # eigvecs_left = np.array([eig_data[0, i]['lvec'].flatten() for i in range(eig_data.shape[1])]).T
+    # mat_E = loadmat(str(cwd / 'data_output' / 'operators' / 'E_sparse.mat'))
+    # E_data = mat_E['E_data'].flatten()
+    # E_indices = mat_E['E_indices'].flatten()
+    # E_indptr = mat_E['E_indptr'].flatten()
+    # E_shape = tuple(mat_E['E_shape'].flatten())
+    # E = csr_matrix((E_data, E_indices, E_indptr), shape=E_shape)
+    # mat_A = loadmat(str(cwd / 'data_output' / 'operators' / 'A_sparse.mat'))
+    # A_data = mat_A['A_data'].flatten()
+    # A_indices = mat_A['A_indices'].flatten()
+    # A_indptr = mat_A['A_indptr'].flatten()
+    # A_shape = tuple(mat_A['A_shape'].flatten())
+    # A = csr_matrix((A_data, A_indices, A_indptr), shape=A_shape)
 
-    UP_lift_data = np.load(cwd / "data_output" / "UP_lin_field_data_unit_control.npy")
-    C = UP_lift_data
+    # UP_lift_data = np.load(cwd / "data_output" / "UP_lin_field_data_unit_control.npy")
+    # C = UP_lift_data
 
-    logger.info("Init time-stepping")
-    fs.initialize_time_stepping(ic=None) 
+    # logger.info("Init time-stepping")
+    # fs.initialize_time_stepping(ic=None) 
 
-    # Find the most unstable mode
-    unstable_idx = np.argmax(eigvals.real)
-    unstable_eigvec = eigvecs[:, unstable_idx]
-    unstable_lefteigvec = eigvecs_left[:, unstable_idx]
+    # # Find the most unstable mode
+    # unstable_idx = np.argmax(eigvals.real)
+    # unstable_eigvec = eigvecs[:, unstable_idx]
+    # unstable_lefteigvec = eigvecs_left[:, unstable_idx]
 
-    print("Right eigenvalue:", eigvals[unstable_idx])
-    print("Biorthogonality:", unstable_lefteigvec.conj().T @ E @ unstable_eigvec)
+    # print("Right eigenvalue:", eigvals[unstable_idx])
+    # print("Biorthogonality:", unstable_lefteigvec.conj().T @ E @ unstable_eigvec)
 
-    # For right eigenvector
-    residual = A @ unstable_eigvec - eigvals[unstable_idx] * (E @ unstable_eigvec)
-    print("Right eigenvector residual norm:", np.linalg.norm(residual))
+    # # For right eigenvector
+    # residual = A @ unstable_eigvec - eigvals[unstable_idx] * (E @ unstable_eigvec)
+    # print("Right eigenvector residual norm:", np.linalg.norm(residual))
 
-    # For left eigenvector
-    residual_left = A.T @ unstable_lefteigvec - np.conj(eigvals[unstable_idx]) * (E.T @ unstable_lefteigvec)
-    print("Left eigenvector residual norm:", np.linalg.norm(residual_left))
+    # # For left eigenvector
+    # residual_left = A.T @ unstable_lefteigvec - np.conj(eigvals[unstable_idx]) * (E.T @ unstable_lefteigvec)
+    # print("Left eigenvector residual norm:", np.linalg.norm(residual_left))
 
-    # # Get velocity DOF indices in the mixed space
-    # V_to_W_vel_mapping = np.load(str(cwd / 'data_output' / 'V_to_W_vel_mapping.npy'))
-    # unstable_eigvec_U = unstable_eigvec[V_to_W_vel_mapping]
-    # unstable_lefteigvec_U = unstable_lefteigvec[V_to_W_vel_mapping]
-    # E_vel = E[V_to_W_vel_mapping, :][:, V_to_W_vel_mapping]
+    # # # Get velocity DOF indices in the mixed space
+    # # V_to_W_vel_mapping = np.load(str(cwd / 'data_output' / 'V_to_W_vel_mapping.npy'))
+    # # unstable_eigvec_U = unstable_eigvec[V_to_W_vel_mapping]
+    # # unstable_lefteigvec_U = unstable_lefteigvec[V_to_W_vel_mapping]
+    # # E_vel = E[V_to_W_vel_mapping, :][:, V_to_W_vel_mapping]
 
-    # --- Assume eigvals, eigvecs, eigvecs_left, A, E, C are loaded as before ---
+    # # --- Assume eigvals, eigvecs, eigvecs_left, A, E, C are loaded as before ---
 
-    # Find the most unstable mode
-    unstable_idx = np.argmax(eigvals.real)
-    phi_raw = eigvecs[:, unstable_idx]           # Right eigenvector (complex)
-    psi_raw = eigvecs_left[:, unstable_idx]      # Left eigenvector (complex)
+    # # Find the most unstable mode
+    # unstable_idx = np.argmax(eigvals.real)
+    # phi_raw = eigvecs[:, unstable_idx]           # Right eigenvector (complex)
+    # psi_raw = eigvecs_left[:, unstable_idx]      # Left eigenvector (complex)
 
-    # --- E-norm normalization and biorthogonal scaling ---s
-    phi = phi_raw / np.sqrt(np.dot(phi_raw.conj(), E.dot(phi_raw)))  # ||phi||_E = 1
-    psi = psi_raw / np.dot(psi_raw.conj(), E.dot(phi))   
+    # # --- E-norm normalization and biorthogonal scaling ---s
+    # phi = phi_raw / np.sqrt(np.dot(phi_raw.conj(), E.dot(phi_raw)))  # ||phi||_E = 1
+    # psi = psi_raw / np.dot(psi_raw.conj(), E.dot(phi))   
 
-    # Split into real and imaginary parts
-    phi_r = np.real(phi)
-    phi_i = np.imag(phi)
-    psi_r = np.real(psi)
-    psi_i = np.imag(psi)
+    # # Split into real and imaginary parts
+    # phi_r = np.real(phi)
+    # phi_i = np.imag(phi)
+    # psi_r = np.real(psi)
+    # psi_i = np.imag(psi)
 
-    # Build real-valued basis for reduced system
-    V = np.column_stack([phi_r, phi_i])    # shape (n, 2)
-    W = np.column_stack([psi_r, psi_i])    # shape (n, 2)
+    # # Build real-valued basis for reduced system
+    # V = np.column_stack([phi_r, phi_i])    # shape (n, 2)
+    # W = np.column_stack([psi_r, psi_i])    # shape (n, 2)
 
-    # Biorthogonal normalization: W^H E V = I
-    norm_mat = W.conj().T @ E @ V
-    W = W @ np.linalg.inv(norm_mat)  # Now W^H E V = I
+    # # Biorthogonal normalization: W^H E V = I
+    # norm_mat = W.conj().T @ E @ V
+    # W = W @ np.linalg.inv(norm_mat)  # Now W^H E V = I
 
-    # Reduced system matrices
-    A_hat = W.conj().T @ A @ V       # shape (2, 2)
-    C_hat = W.conj().T @ E @ C       # shape (2,)
+    # # Reduced system matrices
+    # A_hat = W.conj().T @ A @ V       # shape (2, 2)
+    # C_hat = W.conj().T @ E @ C       # shape (2,)
 
-    print("A_hat (reduced system matrix):\n", A_hat)
-    print("C_hat (reduced control matrix):\n", C_hat)
+    # print("A_hat (reduced system matrix):\n", A_hat)
+    # print("C_hat (reduced control matrix):\n", C_hat)
 
-    # eigval = eigvals[unstable_idx]
-    # err = A @ V - E @ V @ np.array([[eigval.real, eigval.imag], [-eigval.imag,eigval.real]])
+    # # eigval = eigvals[unstable_idx]
+    # # err = A @ V - E @ V @ np.array([[eigval.real, eigval.imag], [-eigval.imag,eigval.real]])
 
-    # Feedback gains (tune as needed)
-    k_r = -0.05 / C_hat[0]
-    k_i = -0.05 / C_hat[1]
-    print(f"Feedback gains: k_r = {k_r}, k_i = {k_i}")
+    # # Feedback gains (tune as needed)
+    # k_r = -0.05 / C_hat[0]
+    # k_i = -0.05 / C_hat[1]
+    # print(f"Feedback gains: k_r = {k_r}, k_i = {k_i}")
 
-    u_ctrl = 0.0
-    u_ctrl_dot_prev = 0.0
+    # u_ctrl = 0.0
+    # u_ctrl_dot_prev = 0.0
 
-    logger.info("Init time-stepping")
-    fs.initialize_time_stepping(ic=None)
+    # logger.info("Init time-stepping")
+    # fs.initialize_time_stepping(ic=None)
 
-    B_norm = np.dot(psi.conj(), E@C/np.linalg.norm(E@C))  # psi^H b
-    print("Normalized Actuator coupling B:", B_norm)
+    # B_norm = np.dot(psi.conj(), E@C/np.linalg.norm(E@C))  # psi^H b
+    # print("Normalized Actuator coupling B:", B_norm)
 
-    for i in range(fs.params_time.num_steps):
-        up_current = fs.fields.up_.vector().get_local()
-        x = up_current - u_ctrl * C
+    # for i in range(fs.params_time.num_steps):
+    #     up_current = fs.fields.up_.vector().get_local()
+    #     x = up_current - u_ctrl * C
 
-        # Project onto real and imaginary parts of the unstable mode
-        z_vec = W.conj().T @ E @ x  # shape (2,)
-        z_r, z_i = z_vec[0], z_vec[1]
+    #     # Project onto real and imaginary parts of the unstable mode
+    #     z_vec = W.conj().T @ E @ x  # shape (2,)
+    #     z_r, z_i = z_vec[0], z_vec[1]
 
-        # Proportional feedback on both components
-        c = k_r * z_r + k_i * z_i
-        u_ctrl_dot = -c  # For lifting convention
+    #     # Proportional feedback on both components
+    #     c = k_r * z_r + k_i * z_i
+    #     u_ctrl_dot = -c  # For lifting convention
 
-        # Integrate control signal
-        if i == 0:
-            u_ctrl_new = u_ctrl + params_time.dt * u_ctrl_dot
-        else:
-            u_ctrl_new = u_ctrl + 0.5 * params_time.dt * (u_ctrl_dot + u_ctrl_dot_prev)
+    #     # Integrate control signal
+    #     if i == 0:
+    #         u_ctrl_new = u_ctrl + params_time.dt * u_ctrl_dot
+    #     else:
+    #         u_ctrl_new = u_ctrl + 0.5 * params_time.dt * (u_ctrl_dot + u_ctrl_dot_prev)
 
-        fs.step(u_ctrl=[float(u_ctrl_new)] * 2)
-        print(f"Step {i}, z_r = {z_r}, z_i = {z_i}, control = {u_ctrl_new}, energy = {fs.compute_energy()}")
+    #     fs.step(u_ctrl=[float(u_ctrl_new)] * 2)
+    #     print(f"Step {i}, z_r = {z_r}, z_i = {z_i}, control = {u_ctrl_new}, energy = {fs.compute_energy()}")
 
-        u_ctrl = u_ctrl_new
-        u_ctrl_dot_prev = u_ctrl_dot
+    #     u_ctrl = u_ctrl_new
+    #     u_ctrl_dot_prev = u_ctrl_dot
 
     ###################### Full Phase Space Control ######################
     # knots = np.linspace(fs.params_time.Tstart, fs.params_time.Tfinal, 10)
     # values = np.random.uniform(-forcing_amplitude, forcing_amplitude, len(knots))
     # cs = CubicSpline(knots, values)
+    # logger.info("Init time-stepping")
+    # fs.initialize_time_stepping(ic=None)
     # for i in range(fs.params_time.num_steps):
     #     # y_meas = flu.MpiUtils.mpi_broadcast(fs.y_meas)
     #     print("Current perturbation Energy:", fs.compute_energy())
@@ -339,6 +344,44 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     #     # u_ctrl = forcing_amplitude * np.sin(forcing_frequency * fs.t)
     #     # u_ctrl = cs(fs.t)
     #     fs.step(u_ctrl=np.repeat(u_ctrl, repeats=2, axis=0))
+
+    # Define MPC parameters at the top
+    N = 20            # Number of MPC steps
+    skip_steps = 50   # Number of fine steps per MPC step
+
+    logger.info("Init time-stepping")
+    fs.initialize_time_stepping(ic=None)
+    u_ctrl_block = 0.0  # Initial control
+
+    for i in range(fs.params_time.num_steps):
+        if i % skip_steps == 0:
+            print(f"Step {i}, Energy: {fs.compute_energy():.6f}, Control: {u_ctrl_block:.4f}")
+            u_current = fs.fields.u_.vector().get_local()  # full velocity field
+
+            # Project to reduced coordinates (POD modes)
+            V = np.array(eng.workspace['V'])  # [full_dim x 2]
+            eta_current = V.T @ u_current     # [2,]
+            eta_current_matlab = [[float(eta_current[0])], [float(eta_current[1])]]
+
+            # Set variables in MATLAB workspace
+            eng.workspace['eta_current'] = matlab.double(eta_current_matlab)
+            eng.workspace['N'] = float(N)
+            eng.workspace['u_bounds'] = matlab.double([[-2], [2]])
+            eng.workspace['Q_energy'] = float(1)
+            eng.workspace['Q_terminal'] = float(10)
+            eng.workspace['R_control'] = float(5)
+            eng.workspace['skip_steps'] = float(skip_steps)
+
+            # Call MPC controller using workspace variables
+            u_opt, eta_pred, energy_pred = eng.eval(
+                "mpc_controller(eta_current, forced_reduced_dynamics, energy_map, N, u_bounds, Q_energy, R_control, skip_steps, Q_terminal)",
+                nargout=3
+            )
+
+            u_ctrl_block = float(u_opt[0][0])  # Use first control input from MPC
+
+        # Apply the same control for skip_steps steps
+        fs.step(u_ctrl=np.repeat(u_ctrl_block, repeats=2, axis=0))
 
     ###################### Delay embedded control ######################
     # buffer_length = (int(np.ceil(2 * eng.workspace['SSMDim'] + 1)) + int(eng.workspace['overEmbed']) - 1) * int(eng.workspace['ShiftSteps']) + 1
@@ -388,14 +431,14 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     save_data(fs, save_dir, cwd, logger)
 
 if __name__ == "__main__":
-    base_dir = Path("/Users/james/Desktop/PhD/cylinder")
+    base_dir = Path("/Users/jaking/Desktop/PhD/cylinder")
     base_dir.mkdir(parents=True, exist_ok=True)
 
     num_steps_forced = 20000
     forcing_amplitude = 0.3
     forcing_frequency = 1.0
 
-    forced_dir = base_dir / f"Re{Re}_boundary_force_nonlin_debug" / "run1"
+    forced_dir = base_dir / f"Re{Re}_boundary_force_mpc" / "run1"
     forced_dir.mkdir(parents=True, exist_ok=True)
 
     run_forced_simulation(Re, forced_dir, num_steps_forced, forcing_amplitude, forcing_frequency)

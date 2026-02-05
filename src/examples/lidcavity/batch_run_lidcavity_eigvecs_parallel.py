@@ -20,11 +20,12 @@ def run_single_simulation(args):
 
 if __name__ == "__main__":
     base_dir = Path("/Users/jaking/Desktop/PhD/lid_driven_cavity")
-    parent_dir = base_dir / f"Re{Re}_test_8800_new"
+    parent_dir = base_dir / f"Re{Re}_test_8100_new"
     parent_dir.mkdir(parents=True, exist_ok=True)
 
     # --- Define Parameters for Iteration ---
-    num_steps = 60000
+    # num_steps = 60000
+    num_steps = 120000
 
     # 1. Forcing parameters
     # forcing_frequencies = np.linspace(1, 5, 9)
@@ -33,20 +34,29 @@ if __name__ == "__main__":
     forcing_amplitudes = [0.0]
 
     # 2. Initial condition parameters
-    eigenvector_amplitude = 0.001 # Post hopf
+    # eigenvector_amplitude = 0.001 # Post hopf
+    eigenvector_amplitude = 0.002 # 8100
     # eigenvector_amplitude = 0.05 # Pre hopf
 
-    coefficient_directions = [
-        [1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, 1, 0],
-        [0, 0, 0, 1],
-        [1, 1, 0, 0],
-        [0, 0, 1, 1],
-        [1, 0, 1, 0],
-        [0, 1, 0, 1],
-        [1, 1, 1, 1],
-    ]
+    # coefficient_directions = [
+    #     [1, 0, 0, 0],
+    #     [0, 1, 0, 0],
+    #     [0, 0, 1, 0],
+    #     [0, 0, 0, 1],
+    #     [1, 1, 0, 0],
+    #     [0, 0, 1, 1],
+    #     [1, 0, 1, 0],
+    #     [0, 1, 0, 1],
+    #     [1, 1, 1, 1],
+    # ]
+
+    # --- Generate 9 coefficient vectors on a circle in leading two directions ---
+    num_circle_points = 9
+    coefficient_directions = []
+    for k in range(num_circle_points):
+        theta = 2 * np.pi * k / num_circle_points
+        coeff = [np.cos(theta), np.sin(theta), 0, 0]
+        coefficient_directions.append(coeff)
     # coefficient_directions = [
     #     [1, 1, 0, 0],
     # ]
