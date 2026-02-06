@@ -131,7 +131,7 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     )
 
     params_ic = flowsolverparameters.ParamIC(
-        xloc=2.0, yloc=0.0, radius=0.5, amplitude=1.0
+        xloc=2.0, yloc=0.0, radius=0.5, amplitude=2.0
     )
 
     fs = CylinderFlowSolver(
@@ -345,16 +345,34 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     #     # u_ctrl = cs(fs.t)
     #     fs.step(u_ctrl=np.repeat(u_ctrl, repeats=2, axis=0))
 
-    # Define MPC parameters at the top
-    N = 20            # Number of MPC steps
-    skip_steps = 50   # Number of fine steps per MPC step
+    # --- Define MPC parameters at the top ---
+    N = 30
+    skip_steps = 50
+    save_every_train = 10  # Add this
+    steps_per_pred = skip_steps // save_every_train  # Calculate steps per prediction
+    alpha = 0.1
+    beta = 1
+    gamma = 10
+    u_bounds = [-0.5, 0.5]
+    delta_u = 0.2       # Max control rate
+    E_max = 6.0         # Max energy
+    eta_max = 30.0       # Max state norm
+    P = eng.feval('get_terminal_cost', eng.workspace['reduced_dynamics'], eng.workspace['B_const'], eng.workspace['energy_map'], float(alpha))
+    P_scale = 0.0  # Set to 0 for no terminal cost, 1.0 for full
+    P_scaled = np.array(P) * P_scale
+    eng.workspace['P'] = matlab.double(P_scaled.tolist())
+    # eng.workspace['P'] = P
+
+    # --- Initialize control history for warm start ---
+    u0 = np.zeros((N, 1))  # Initial guess for optimizer
+    u_ctrl_block = 0.0     # Last applied control
 
     logger.info("Init time-stepping")
     fs.initialize_time_stepping(ic=None)
-    u_ctrl_block = 0.0  # Initial control
+    warmup_steps = 3000
 
     for i in range(fs.params_time.num_steps):
-        if i % skip_steps == 0:
+        if i % skip_steps == 0 and i > warmup_steps:
             print(f"Step {i}, Energy: {fs.compute_energy():.6f}, Control: {u_ctrl_block:.4f}")
             u_current = fs.fields.u_.vector().get_local()  # full velocity field
 
@@ -366,19 +384,26 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
             # Set variables in MATLAB workspace
             eng.workspace['eta_current'] = matlab.double(eta_current_matlab)
             eng.workspace['N'] = float(N)
-            eng.workspace['u_bounds'] = matlab.double([[-2], [2]])
-            eng.workspace['Q_energy'] = float(1)
-            eng.workspace['Q_terminal'] = float(10)
-            eng.workspace['R_control'] = float(5)
-            eng.workspace['skip_steps'] = float(skip_steps)
+            eng.workspace['u_bounds'] = matlab.double([[u_bounds[0]], [u_bounds[1]]])
+            eng.workspace['alpha'] = float(alpha)
+            eng.workspace['beta'] = float(beta)
+            eng.workspace['gamma'] = float(gamma)
+            eng.workspace['delta_u'] = float(delta_u)
+            eng.workspace['E_max'] = float(E_max)
+            eng.workspace['eta_max'] = float(eta_max)
+            eng.workspace['u_prev_applied'] = float(u_ctrl_block)
+            eng.workspace['u0'] = matlab.double(u0.tolist())
+            eng.workspace['steps_per_pred'] = float(steps_per_pred)  # Add this
 
             # Call MPC controller using workspace variables
             u_opt, eta_pred, energy_pred = eng.eval(
-                "mpc_controller(eta_current, forced_reduced_dynamics, energy_map, N, u_bounds, Q_energy, R_control, skip_steps, Q_terminal)",
+                "mpc_controller(eta_current, reduced_dynamics, B_const, energy_map, N, u_bounds, alpha, beta, gamma, P, delta_u, E_max, eta_max, u_prev_applied, u0, steps_per_pred)",
                 nargout=3
             )
-
             u_ctrl_block = float(u_opt[0][0])  # Use first control input from MPC
+
+            # Shift sequence and pad with zero (encourage return to zero control)
+            u0 = np.vstack([np.array(u_opt[1:]), np.zeros((1, 1))])
 
         # Apply the same control for skip_steps steps
         fs.step(u_ctrl=np.repeat(u_ctrl_block, repeats=2, axis=0))
@@ -438,7 +463,7 @@ if __name__ == "__main__":
     forcing_amplitude = 0.3
     forcing_frequency = 1.0
 
-    forced_dir = base_dir / f"Re{Re}_boundary_force_mpc" / "run1"
+    forced_dir = base_dir / f"Re{Re}_boundary_force_mpc_5" / "run1"
     forced_dir.mkdir(parents=True, exist_ok=True)
 
     run_forced_simulation(Re, forced_dir, num_steps_forced, forcing_amplitude, forcing_frequency)
