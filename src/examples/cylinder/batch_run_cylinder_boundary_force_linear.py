@@ -19,7 +19,7 @@ from examples.cylinder.batch_run_cylinder import save_data
 import matlab.engine
 eng = matlab.engine.start_matlab()
 eng.cd('/Users/jaking/Desktop/PhD/Cylinder', nargout=0)
-eng.load('mpc_controller_workspace.mat', nargout=0)
+eng.load('mpc_controller_workspace_forced.mat', nargout=0)
 
 # eng.cd('/Users/jaking/Desktop/PhD/Cylinder', nargout=0)
 # eng.load('lqr_controller_workspace_body_force.mat', nargout=0)
@@ -350,12 +350,12 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     skip_steps = 50
     save_every_train = 10  # Add this
     steps_per_pred = skip_steps // save_every_train  # Calculate steps per prediction
-    alpha = 0.1
-    beta = 1
-    gamma = 10
-    u_bounds = [-0.5, 0.5]
-    delta_u = 0.2       # Max control rate
-    E_max = 6.0         # Max energy
+    alpha = 0.2
+    beta = 0.4
+    gamma = 0
+    u_bounds = [-1.0, 1.0]
+    delta_u = 0.4       # Max control rate
+    E_max = 7.0         # Max energy
     eta_max = 30.0       # Max state norm
     P = eng.feval('get_terminal_cost', eng.workspace['reduced_dynamics'], eng.workspace['B_const'], eng.workspace['energy_map'], float(alpha))
     P_scale = 0.0  # Set to 0 for no terminal cost, 1.0 for full
@@ -379,7 +379,7 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
             # Project to reduced coordinates (POD modes)
             V = np.array(eng.workspace['V'])  # [full_dim x 2]
             eta_current = V.T @ u_current     # [2,]
-            eta_current_matlab = [[float(eta_current[0])], [float(eta_current[1])]]
+            eta_current_matlab = eta_current.reshape(-1, 1).tolist()
 
             # Set variables in MATLAB workspace
             eng.workspace['eta_current'] = matlab.double(eta_current_matlab)
@@ -463,7 +463,7 @@ if __name__ == "__main__":
     forcing_amplitude = 0.3
     forcing_frequency = 1.0
 
-    forced_dir = base_dir / f"Re{Re}_boundary_force_mpc_5" / "run1"
+    forced_dir = base_dir / f"Re{Re}_boundary_force_mpc_4" / "run1"
     forced_dir.mkdir(parents=True, exist_ok=True)
 
     run_forced_simulation(Re, forced_dir, num_steps_forced, forcing_amplitude, forcing_frequency)
