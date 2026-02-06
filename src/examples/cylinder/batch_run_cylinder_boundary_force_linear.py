@@ -18,7 +18,7 @@ from flowcontrol.controller import Controller
 from examples.cylinder.batch_run_cylinder import save_data
 import matlab.engine
 eng = matlab.engine.start_matlab()
-eng.cd('/Users/jaking/Desktop/PhD/Cylinder', nargout=0)
+eng.cd('/Users/james/Desktop/PhD/cylinder', nargout=0)
 eng.load('mpc_controller_workspace_forced.mat', nargout=0)
 
 # eng.cd('/Users/jaking/Desktop/PhD/Cylinder', nargout=0)
@@ -347,14 +347,14 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
 
     # --- Define MPC parameters at the top ---
     N = 30
-    skip_steps = 50
+    skip_steps = 40
     save_every_train = 10  # Add this
     steps_per_pred = skip_steps // save_every_train  # Calculate steps per prediction
-    alpha = 0.2
-    beta = 0.4
+    alpha = 0.05
+    beta = 0.05
     gamma = 0
-    u_bounds = [-1.0, 1.0]
-    delta_u = 0.4       # Max control rate
+    u_bounds = [-1.5, 1.5]
+    delta_u = 0.6       # Max control rate
     E_max = 7.0         # Max energy
     eta_max = 30.0       # Max state norm
     P = eng.feval('get_terminal_cost', eng.workspace['reduced_dynamics'], eng.workspace['B_const'], eng.workspace['energy_map'], float(alpha))
@@ -456,14 +456,14 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     save_data(fs, save_dir, cwd, logger)
 
 if __name__ == "__main__":
-    base_dir = Path("/Users/jaking/Desktop/PhD/cylinder")
+    base_dir = Path("/Users/james/Desktop/PhD/cylinder")
     base_dir.mkdir(parents=True, exist_ok=True)
 
     num_steps_forced = 20000
     forcing_amplitude = 0.3
     forcing_frequency = 1.0
 
-    forced_dir = base_dir / f"Re{Re}_boundary_force_mpc_4" / "run1"
+    forced_dir = base_dir / f"Re{Re}_boundary_force_mpc_laptop_3" / "run1"
     forced_dir.mkdir(parents=True, exist_ok=True)
 
     run_forced_simulation(Re, forced_dir, num_steps_forced, forcing_amplitude, forcing_frequency)
