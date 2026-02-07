@@ -346,8 +346,8 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     #     fs.step(u_ctrl=np.repeat(u_ctrl, repeats=2, axis=0))
 
     # --- Define MPC parameters at the top ---
-    N = 40
-    skip_steps = 30
+    N = 30
+    skip_steps = 40
     save_every_train = 10  # Add this
     steps_per_pred = skip_steps // save_every_train  # Calculate steps per prediction
     alpha = 0.01
