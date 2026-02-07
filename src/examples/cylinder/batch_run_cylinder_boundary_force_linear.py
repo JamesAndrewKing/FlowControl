@@ -346,15 +346,15 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     #     fs.step(u_ctrl=np.repeat(u_ctrl, repeats=2, axis=0))
 
     # --- Define MPC parameters at the top ---
-    N = 30
-    skip_steps = 40
+    N = 40
+    skip_steps = 30
     save_every_train = 10  # Add this
     steps_per_pred = skip_steps // save_every_train  # Calculate steps per prediction
-    alpha = 0.05
-    beta = 0.05
+    alpha = 0.01
+    beta = 0.01
     gamma = 0
     u_bounds = [-1.5, 1.5]
-    delta_u = 0.6       # Max control rate
+    delta_u = 0.8       # Max control rate
     E_max = 7.0         # Max energy
     eta_max = 30.0       # Max state norm
     P = eng.feval('get_terminal_cost', eng.workspace['reduced_dynamics'], eng.workspace['B_const'], eng.workspace['energy_map'], float(alpha))
