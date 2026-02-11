@@ -20,7 +20,7 @@ import matlab.engine
 eng = matlab.engine.start_matlab()
 eng.cd('/Users/james/Desktop/PhD/cylinder', nargout=0)
 eng.eval('clear all; clc;', nargout=0)
-eng.load('mpc_controller_workspace_forced.mat', nargout=0)
+eng.load('mpc_controller_workspace_forced_poly_yalmip.mat', nargout=0)
 eng.eval('rng(1);', nargout=0)
 np.random.seed(0)
 
@@ -351,20 +351,24 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     # --- Define MPC parameters at the top ---
     N = 30
     skip_steps = 40
-    save_every_train = 10  # Add this
-    steps_per_pred = skip_steps // save_every_train  # Calculate steps per prediction
+    save_every_train = 10
+    steps_per_pred = skip_steps // save_every_train
     alpha = 0.01
     beta = 0.01
     gamma = 0
     u_bounds = [-1.5, 1.5]
-    delta_u = 0.8       # Max control rate
-    E_max = 7.0         # Max energy
-    eta_max = 30.0       # Max state norm
+    delta_u = 0.8
+    E_max = 7.0
+    eta_max = 30.0
+
+    # Recreate Energy map from workspace
+    eng.eval("energy_map = @(eta) create_energy_map(eta, c_opt, exponents);", nargout=0)
+
+    # Terminal cost (if needed)
     P = eng.feval('get_terminal_cost', eng.workspace['reduced_dynamics'], eng.workspace['B_const'], eng.workspace['energy_map'], float(alpha))
     P_scale = 0.0  # Set to 0 for no terminal cost, 1.0 for full
     P_scaled = np.array(P) * P_scale
     eng.workspace['P'] = matlab.double(P_scaled.tolist())
-    # eng.workspace['P'] = P
 
     # --- Initialize control history for warm start ---
     u0 = np.zeros((N, 1))  # Initial guess for optimizer
@@ -380,8 +384,8 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
             u_current = fs.fields.u_.vector().get_local()  # full velocity field
 
             # Project to reduced coordinates (POD modes)
-            V = np.array(eng.workspace['V'])  # [full_dim x 2]
-            eta_current = V.T @ u_current     # [2,]
+            V = np.array(eng.workspace['V'])  # [full_dim x SSMDim]
+            eta_current = V.T @ u_current     # [SSMDim,]
             eta_current_matlab = eta_current.reshape(-1, 1).tolist()
 
             # Set variables in MATLAB workspace
@@ -396,7 +400,7 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
             eng.workspace['eta_max'] = float(eta_max)
             eng.workspace['u_prev_applied'] = float(u_ctrl_block)
             eng.workspace['u0'] = matlab.double(u0.tolist())
-            eng.workspace['steps_per_pred'] = float(steps_per_pred)  # Add this
+            eng.workspace['steps_per_pred'] = float(steps_per_pred)
 
             # Call MPC controller using workspace variables
             u_opt, eta_pred, energy_pred = eng.eval(
@@ -462,11 +466,11 @@ if __name__ == "__main__":
     base_dir = Path("/Users/james/Desktop/PhD/cylinder")
     base_dir.mkdir(parents=True, exist_ok=True)
 
-    num_steps_forced = 20000
+    num_steps_forced = 40000
     forcing_amplitude = 0.3
     forcing_frequency = 1.0
 
-    forced_dir = base_dir / f"Re{Re}_boundary_force_mpc_laptop_3" / "run1"
+    forced_dir = base_dir / f"Re{Re}_boundary_force_mpc_laptop_poly_long" / "run1"
     forced_dir.mkdir(parents=True, exist_ok=True)
 
     run_forced_simulation(Re, forced_dir, num_steps_forced, forcing_amplitude, forcing_frequency)
