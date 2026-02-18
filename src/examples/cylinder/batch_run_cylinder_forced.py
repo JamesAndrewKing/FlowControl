@@ -170,10 +170,10 @@ def run_forced_simulation(Re, save_dir, num_steps, autonomous_dir, forcing_ampli
     fs.initialize_time_stepping(ic=None)  # or ic=dolfin.Function(fs.W)
 
     # --- HOTFIX: Load u_optimal.mat and prepare control signal ---
-    u_optimal_path = Path("/Users/jaking/Desktop/PhD/cylinder/u_ctrl_lqr_new.mat")
-    mat = loadmat(u_optimal_path)
-    # t_interp = mat['t_recovered'].flatten()
-    u_optimal = mat['u_ctrl_lqr_interp'].flatten()
+    # u_optimal_path = Path("/Users/jaking/Desktop/PhD/cylinder/u_ctrl_lqr_new.mat")
+    # mat = loadmat(u_optimal_path)
+    # # t_interp = mat['t_recovered'].flatten()
+    # u_optimal = mat['u_ctrl_lqr_interp'].flatten()
     # sim_times = np.arange(fs.params_time.Tstart, 
     #                      fs.params_time.Tstart + fs.params_time.dt * fs.params_time.num_steps, 
     #                      fs.params_time.dt)
@@ -181,15 +181,16 @@ def run_forced_simulation(Re, save_dir, num_steps, autonomous_dir, forcing_ampli
     # ------------------------------------------------------------
     
     # Chirp:
-    # Kss = Controller.from_file(file=cwd / "data_input" / "Kopt_reduced13.mat", x0=0)
+    Kss = Controller.from_file(file=cwd / "data_input" / "Kopt_reduced13.mat", x0=0)
     # Spline:
     # knots = np.linspace(fs.params_time.Tstart, fs.params_time.Tfinal, 10)
     # values = np.random.uniform(-forcing_amplitude, forcing_amplitude, len(knots))
     # cs = CubicSpline(knots, values)
     for i in range(fs.params_time.num_steps):
         y_meas = flu.MpiUtils.mpi_broadcast(fs.y_meas)
-        # u_ctrl = Kss.step(y=-y_meas[0], dt=fs.params_time.dt)
-        u_ctrl = np.real(u_optimal[i])
+        u_ctrl = Kss.step(y=-y_meas[0], dt=fs.params_time.dt)
+        print(f"Step {i}, Energy: {fs.compute_energy():.6f}, Control: {u_ctrl[0]:.4f}")
+        # u_ctrl = np.real(u_optimal[i])
         # u_ctrl = cs(fs.t)
         # u_ctrl = forcing_amplitude * np.sin(forcing_frequency * fs.t)
         # u_ctrl = forcing_amplitude * chirp(fs.t, f0=0.0, f1=forcing_frequency/(2 * np.pi), t1=fs.params_time.Tfinal, method='linear')
@@ -218,7 +219,7 @@ def run_forced_simulation(Re, save_dir, num_steps, autonomous_dir, forcing_ampli
     save_data(fs, save_dir, cwd, logger)
 
 if __name__ == "__main__":
-    base_dir = Path("/Users/jaking/Desktop/PhD/cylinder")
+    base_dir = Path("/Users/james/Desktop/PhD/cylinder")
     base_dir.mkdir(parents=True, exist_ok=True)
 
     num_steps_forced = 4000
@@ -226,7 +227,7 @@ if __name__ == "__main__":
     forcing_frequency = 1.0
 
     autonomous_dir = base_dir / f"Re{Re}_autonomous" / "run1"
-    forced_dir = base_dir / f"Re{Re}_open_loop" / "run1"
+    forced_dir = base_dir / f"Re{Re}_open_loop_test" / "run1"
     forced_dir.mkdir(parents=True, exist_ok=True)
 
     # Run autonomous simulation

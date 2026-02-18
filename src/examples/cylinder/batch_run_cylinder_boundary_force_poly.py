@@ -376,11 +376,22 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
 
     logger.info("Init time-stepping")
     fs.initialize_time_stepping(ic=None)
-    warmup_steps = 3000
+    warmup_steps = 4000
+    Kss = Controller.from_file(file=cwd / "data_input" / "Kopt_reduced13.mat", x0=0)
 
     for i in range(fs.params_time.num_steps):
-        if i % skip_steps == 0 and i > warmup_steps:
+        energy = fs.compute_energy()
+        if i % skip_steps == 0 and i > warmup_steps and energy >= 2:
             print(f"Step {i}, Energy: {fs.compute_energy():.6f}, Control: {u_ctrl_block:.4f}")
+
+            energy = fs.compute_energy()
+            if energy < 3.0:
+                alpha = 0.1
+                beta = 0.1
+            else:
+                alpha = 0.01
+                beta = 0.01
+
             u_current = fs.fields.u_.vector().get_local()  # full velocity field
 
             # Project to reduced coordinates (POD modes)
@@ -413,6 +424,10 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
             u0 = np.vstack([np.array(u_opt[1:]), np.zeros((1, 1))])
 
         # Apply the same control for skip_steps steps
+        if energy < 2.0 and i > warmup_steps:
+            y_meas = flu.MpiUtils.mpi_broadcast(fs.y_meas)
+            u_ctrl_block = Kss.step(y=-y_meas[0], dt=fs.params_time.dt)[0]
+        
         fs.step(u_ctrl=np.repeat(u_ctrl_block, repeats=2, axis=0))
 
     ###################### Delay embedded control ######################
@@ -470,7 +485,7 @@ if __name__ == "__main__":
     forcing_amplitude = 0.3
     forcing_frequency = 1.0
 
-    forced_dir = base_dir / f"Re{Re}_boundary_force_mpc_laptop_poly_long" / "run1"
+    forced_dir = base_dir / f"Re{Re}_boundary_force_mpc_laptop_poly_linear_3" / "run1"
     forced_dir.mkdir(parents=True, exist_ok=True)
 
     run_forced_simulation(Re, forced_dir, num_steps_forced, forcing_amplitude, forcing_frequency)
