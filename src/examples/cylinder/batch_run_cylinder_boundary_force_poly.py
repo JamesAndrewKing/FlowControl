@@ -373,24 +373,28 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     # --- Initialize control history for warm start ---
     u0 = np.zeros((N, 1))  # Initial guess for optimizer
     u_ctrl_block = 0.0     # Last applied control
+    switch = False
 
     logger.info("Init time-stepping")
     fs.initialize_time_stepping(ic=None)
-    warmup_steps = 4000
+    warmup_steps = 5000
     Kss = Controller.from_file(file=cwd / "data_input" / "Kopt_reduced13.mat", x0=0)
 
     for i in range(fs.params_time.num_steps):
         energy = fs.compute_energy()
-        if i % skip_steps == 0 and i > warmup_steps and energy >= 2:
+        if i % skip_steps == 0 and i > warmup_steps and not switch:
             print(f"Step {i}, Energy: {fs.compute_energy():.6f}, Control: {u_ctrl_block:.4f}")
 
             energy = fs.compute_energy()
-            if energy < 3.0:
-                alpha = 0.1
-                beta = 0.1
-            else:
-                alpha = 0.01
-                beta = 0.01
+            if energy < 2.0:
+                switch = True
+
+            # if energy < 3.0:
+            #     alpha = 0.1
+            #     beta = 0.1
+            # else:
+            #     alpha = 0.01
+            #     beta = 0.01
 
             u_current = fs.fields.u_.vector().get_local()  # full velocity field
 
@@ -424,9 +428,12 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
             u0 = np.vstack([np.array(u_opt[1:]), np.zeros((1, 1))])
 
         # Apply the same control for skip_steps steps
-        if energy < 2.0 and i > warmup_steps:
+        if switch and i > warmup_steps:
+            energy = fs.compute_energy()
+            print(f"Step {i}, Energy: {fs.compute_energy():.6f}, Control: {u_ctrl_block:.4f}")
             y_meas = flu.MpiUtils.mpi_broadcast(fs.y_meas)
             u_ctrl_block = Kss.step(y=-y_meas[0], dt=fs.params_time.dt)[0]
+            u_ctrl_block = np.clip(u_ctrl_block, -1, 1)
         
         fs.step(u_ctrl=np.repeat(u_ctrl_block, repeats=2, axis=0))
 
@@ -481,11 +488,11 @@ if __name__ == "__main__":
     base_dir = Path("/Users/james/Desktop/PhD/cylinder")
     base_dir.mkdir(parents=True, exist_ok=True)
 
-    num_steps_forced = 40000
+    num_steps_forced = 60000
     forcing_amplitude = 0.3
     forcing_frequency = 1.0
 
-    forced_dir = base_dir / f"Re{Re}_boundary_force_mpc_laptop_poly_linear_3" / "run1"
+    forced_dir = base_dir / f"Re{Re}_boundary_force_mpc_laptop_poly_linear_final_test" / "run1"
     forced_dir.mkdir(parents=True, exist_ok=True)
 
     run_forced_simulation(Re, forced_dir, num_steps_forced, forcing_amplitude, forcing_frequency)
