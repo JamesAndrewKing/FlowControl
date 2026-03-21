@@ -159,12 +159,12 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     )
 
     # --- Define MPC parameters at the top ---
-    N = 30
-    skip_steps = 30
+    N = 20
+    skip_steps = 210
     save_every_train = 30
     # save_every_train = 15
     steps_per_pred = skip_steps // save_every_train
-    alpha = 2
+    alpha = 1
     beta = 10
     gamma = 0
     u_bounds = [-1.5, 1.5]
@@ -181,7 +181,7 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
 
     logger.info("Init time-stepping")
     fs.initialize_time_stepping(ic=None)
-    warmup_steps = 0
+    warmup_steps = 5000
     Kss = Controller.from_file(file=cwd / "data_input" / "Kopt_reduced13.mat", x0=0)
 
     y_history = []
