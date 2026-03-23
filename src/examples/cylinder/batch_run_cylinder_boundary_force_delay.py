@@ -159,16 +159,16 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     )
 
     # --- Define MPC parameters at the top ---
-    N = 20
+    N = 25
     skip_steps = 210
     save_every_train = 30
     # save_every_train = 15
     steps_per_pred = skip_steps // save_every_train
     alpha = 1
-    beta = 10
+    beta = 15
     gamma = 0
     u_bounds = [-1.5, 1.5]
-    delta_u = 0.4
+    delta_u = 0.8
     E_max = 7.0
     eta_max = 30.0
 
@@ -367,7 +367,7 @@ if __name__ == "__main__":
     forcing_amplitude = 0.3
     forcing_frequency = 1.0
 
-    forced_dir = base_dir / f"Re{Re}_boundary_force_mpc_laptop_delay" / "run1"
+    forced_dir = base_dir / f"Re{Re}_boundary_force_mpc_laptop_delay_8" / "run1"
     forced_dir.mkdir(parents=True, exist_ok=True)
 
     run_forced_simulation(Re, forced_dir, num_steps_forced, forcing_amplitude, forcing_frequency)
