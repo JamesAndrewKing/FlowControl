@@ -18,7 +18,7 @@ from flowcontrol.controller import Controller
 from examples.cylinder.batch_run_cylinder import save_data
 import matlab.engine
 eng = matlab.engine.start_matlab()
-eng.cd('/Users/jaking/Desktop/PhD/cylinder', nargout=0)
+eng.cd('/Users/james/Desktop/PhD/cylinder', nargout=0)
 eng.eval('clear all; clc;', nargout=0)
 eng.load('mpc_controller_workspace_forced_delay.mat', nargout=0)
 eng.eval('rng(1);', nargout=0)
@@ -159,12 +159,13 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     )
 
     # --- Define MPC parameters at the top ---
-    N = 30
-    skip_steps = 30
+    N = 25
+    skip_steps = 210
     save_every_train = 30
+    # save_every_train = 15
     steps_per_pred = skip_steps // save_every_train
-    alpha = 2
-    beta = 10
+    alpha = 1
+    beta = 15
     gamma = 0
     u_bounds = [-1.5, 1.5]
     delta_u = 0.8
@@ -183,8 +184,8 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     warmup_steps = 5000
     Kss = Controller.from_file(file=cwd / "data_input" / "Kopt_reduced13.mat", x0=0)
 
-    y_history = [0.0] * signal_buffer_length
-    u_history = [0.0] * control_window_length
+    y_history = []
+    u_history = []
     u0 = np.zeros((N, 1))
     u_ctrl_block = 0.0
     switch = False
@@ -196,14 +197,10 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
         if len(y_history) > signal_buffer_length:
             y_history.pop(0)
 
+
         u_history.append(float(u_ctrl_block))
         if len(u_history) > control_window_length:
             u_history.pop(0)
-        # Update u_history at every ROM step (not just MPC step)
-        # if i % save_every_train == 0:
-        #     u_history.append(float(u_ctrl_block))
-        #     if len(u_history) > control_window_length:
-        #         u_history.pop(0)
 
         # --- MPC control phase ---
         if len(y_history) == signal_buffer_length and i % skip_steps == 0 and i > warmup_steps and not switch:
@@ -363,14 +360,14 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     save_data(fs, save_dir, cwd, logger)
 
 if __name__ == "__main__":
-    base_dir = Path("/Users/jaking/Desktop/PhD/cylinder")
+    base_dir = Path("/Users/james/Desktop/PhD/cylinder")
     base_dir.mkdir(parents=True, exist_ok=True)
 
     num_steps_forced = 20000
     forcing_amplitude = 0.3
     forcing_frequency = 1.0
 
-    forced_dir = base_dir / f"Re{Re}_boundary_force_mpc_laptop_delay" / "run1"
+    forced_dir = base_dir / f"Re{Re}_boundary_force_mpc_laptop_delay_8" / "run1"
     forced_dir.mkdir(parents=True, exist_ok=True)
 
     run_forced_simulation(Re, forced_dir, num_steps_forced, forcing_amplitude, forcing_frequency)
