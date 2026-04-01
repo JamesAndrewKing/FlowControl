@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import flowcontrol.flowsolverparameters as flowsolverparameters
 import utils.utils_flowsolver as flu
 from examples.cylinder.cylinderflowsolver import CylinderFlowSolver
-from flowcontrol.actuator import ActuatorBCParabolicV, ActuatorForceGaussianV
+from flowcontrol.actuator import ActuatorBCParabolicV, ActuatorForceGaussianV, ActuatorForceGaussianAngled
 from flowcontrol.controller import Controller
 from flowcontrol.sensor import SENSOR_TYPE, SensorPoint
 from examples.cylinder.compute_steady_state import Re
@@ -83,13 +83,30 @@ def main():
     #     position_x=0.0,
     # )
 
-    actuator_force_1 = ActuatorForceGaussianV(
-        sigma=0.1, position=np.array([0.0, 0.5])
+    # actuator_force_1 = ActuatorForceGaussianV(
+    #     sigma=0.1, position=np.array([0.0, 0.5])
+    # )
+    # actuator_force_2 = ActuatorForceGaussianV(
+    #     sigma=0.1, position=np.array([0.0, -0.5])
+    # )
+    # Angled body force actuators:
+    r = 0.6
+    theta1 = np.deg2rad(70)
+    theta2 = -np.deg2rad(70)
+    center = np.array([0.0, 0.0])
+
+    pos1 = center + r * np.array([np.cos(theta1), np.sin(theta1)])
+    pos2 = center + r * np.array([np.cos(theta2), np.sin(theta2)])
+
+    actuator_force_1 = ActuatorForceGaussianAngled(
+        sigma=0.1, A=1.0, position=pos1, theta=theta1
     )
-    actuator_force_2 = ActuatorForceGaussianV(
-        sigma=0.1, position=np.array([0.0, -0.5])
+    actuator_force_2 = ActuatorForceGaussianAngled(
+        sigma=0.1, A=1.0, position=pos2, theta=theta2
     )
-    sensor_feedback = SensorPoint(sensor_type=SENSOR_TYPE.V, position=np.array([3, 0]))
+
+    # sensor_feedback = SensorPoint(sensor_type=SENSOR_TYPE.V, position=np.array([3, 0]))
+    sensor_feedback = SensorPoint(sensor_type=SENSOR_TYPE.V, position=np.array([2.5, 0]))
     sensor_perf_1 = SensorPoint(sensor_type=SENSOR_TYPE.V, position=np.array([3.1, 1]))
     sensor_perf_2 = SensorPoint(sensor_type=SENSOR_TYPE.V, position=np.array([3.1, -1]))
     params_control = flowsolverparameters.ParamControl(
@@ -164,7 +181,7 @@ def main():
     B[V_to_W_vel_mapping] = actuator_profile_vels_1 + actuator_profile_vels_2
 
     # Find sensor DoF and assemble C
-    sensor_position = np.array([3.0, 0.0])
+    sensor_position = np.array([2.5, 0.0])
     dof_index = find_sensor_dof_index(fs.V, sensor_position)
     C = np.zeros(dim)
     C[V_to_W_vel_mapping[dof_index]] = 1.0
@@ -208,8 +225,10 @@ def main():
 
     path_out = cwd / "data_output" / "nyquist"
     path_out.mkdir(parents=True, exist_ok=True)
-    np.save(path_out / "G_vals.npy", G_vals)
-    np.save(path_out / "omega_range.npy", omega_range)
+    # np.save(path_out / "G_vals.npy", G_vals)
+    # np.save(path_out / "omega_range.npy", omega_range)
+    scipy.io.savemat(path_out / 'G_vals.mat', {'G_vals': G_vals})
+    scipy.io.savemat(path_out / 'omega_range.mat', {'omega_range': omega_range})
 
     plt.figure(figsize=(6,6))
     plt.plot(G_vals.real, G_vals.imag, label="Nyquist curve")
@@ -266,6 +285,8 @@ def main():
         scipy.io.savemat(path_out / "B.mat", {"B": B})
         np.save(path_out / "C.npy", C)
         scipy.io.savemat(path_out / "C.mat",{"C": C})
+        # scipy.io.savemat(path_out / 'nyquist/G_vals.mat', {'G_vals': G_vals})
+        # scipy.io.savemat(path_out / 'nyquist/omega_range.mat', {'omega_range': omega_range})
 
     logger.info("Lidcavity -- Finished properly.")
     logger.info("*" * 50)

@@ -187,6 +187,31 @@ class ActuatorForceGaussianV(Actuator):
         expression.u_ctrl = 0.0
         self.expression = expression
 
+@dataclass(kw_only=True)
+class ActuatorForceGaussianAngled(Actuator):
+    sigma: float
+    A: float
+    position: np.ndarray  # [x0, y0]
+    theta: float
+    actuator_type: ACTUATOR_TYPE = ACTUATOR_TYPE.FORCE
+
+    def load_expression(self, flowsolver):
+        expr = dolfin.Expression(
+            [
+                # x-component
+                "cos_theta * (A/(2*pi*sig*sig)) * exp(-0.5*((x[0]-x0)*(x[0]-x0)+(x[1]-y0)*(x[1]-y0))/(sig*sig))",
+                # y-component
+                "sin_theta * (A/(2*pi*sig*sig)) * exp(-0.5*((x[0]-x0)*(x[0]-x0)+(x[1]-y0)*(x[1]-y0))/(sig*sig))"
+            ],
+            element=flowsolver.V.ufl_element(),
+            A=self.A,
+            sig=self.sigma,
+            x0=self.position[0], y0=self.position[1],
+            cos_theta=np.cos(self.theta),
+            sin_theta=np.sin(self.theta),
+        )
+        self.expression = expr
+
 
 if __name__ == "__main__":
     print("-" * 10)

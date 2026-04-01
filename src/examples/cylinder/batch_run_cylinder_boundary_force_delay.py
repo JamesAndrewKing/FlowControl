@@ -160,11 +160,11 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
 
     # --- Define MPC parameters at the top ---
     N = 30
-    skip_steps = 40
-    save_every_train = 10
+    skip_steps = 30
+    save_every_train = 30
     steps_per_pred = skip_steps // save_every_train
-    alpha = 0.01
-    beta = 0.01
+    alpha = 2
+    beta = 10
     gamma = 0
     u_bounds = [-1.5, 1.5]
     delta_u = 0.8
@@ -175,12 +175,12 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     eng.eval("energy_map = @(eta) create_energy_map(eta, c_opt, exponents);", nargout=0)
     eng.workspace['SSMDim'] = float(3)
 
-    control_window_length = int(eng.workspace['control_window_length'])
+    control_window_length = (int(np.ceil(2 * eng.workspace['SSMDim'] + 1)) + int(eng.workspace['overEmbedControl']) - 1) * int(eng.workspace['ShiftSteps']) + 1
     signal_buffer_length = (int(np.ceil(2 * eng.workspace['SSMDim'] + 1)) + int(eng.workspace['overEmbed']) - 1) * int(eng.workspace['ShiftSteps']) + 1
 
     logger.info("Init time-stepping")
     fs.initialize_time_stepping(ic=None)
-    warmup_steps = 0
+    warmup_steps = 5000
     Kss = Controller.from_file(file=cwd / "data_input" / "Kopt_reduced13.mat", x0=0)
 
     y_history = [0.0] * signal_buffer_length
@@ -196,11 +196,14 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
         if len(y_history) > signal_buffer_length:
             y_history.pop(0)
 
+        u_history.append(float(u_ctrl_block))
+        if len(u_history) > control_window_length:
+            u_history.pop(0)
         # Update u_history at every ROM step (not just MPC step)
-        if i % save_every_train == 0:
-            u_history.append(float(u_ctrl_block))
-            if len(u_history) > control_window_length:
-                u_history.pop(0)
+        # if i % save_every_train == 0:
+        #     u_history.append(float(u_ctrl_block))
+        #     if len(u_history) > control_window_length:
+        #         u_history.pop(0)
 
         # --- MPC control phase ---
         if len(y_history) == signal_buffer_length and i % skip_steps == 0 and i > warmup_steps and not switch:
@@ -226,6 +229,7 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
                 float(eng.workspace['ShiftSteps']),
                 float(steps_per_pred),
                 float(save_every_train),
+                float(eng.workspace['overEmbedControl']),
                 matlab.double(u0.tolist()),
                 nargout=3
             )
