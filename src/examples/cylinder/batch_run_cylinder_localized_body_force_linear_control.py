@@ -10,7 +10,7 @@ import logging
 import time
 from examples.cylinder.cylinderflowsolver import CylinderFlowSolver
 import flowcontrol.flowsolverparameters as flowsolverparameters
-from flowcontrol.actuator import ActuatorBCParabolicV, ActuatorForceGaussianV, ActuatorForceGaussianAngled
+from flowcontrol.actuator import ActuatorBCParabolicV, ActuatorForceGaussianV
 from flowcontrol.sensor import SENSOR_TYPE, SensorPoint
 import utils.utils_flowsolver as flu
 from examples.cylinder.compute_steady_state import Re
@@ -83,22 +83,15 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     )
 
     # Angled body force actuators:
-    r = 0.6
-    theta1 = np.deg2rad(70)
-    theta2 = -np.deg2rad(70)
-    center = np.array([0.0, 0.0])
 
-    pos1 = center + r * np.array([np.cos(theta1), np.sin(theta1)])
-    pos2 = center + r * np.array([np.cos(theta2), np.sin(theta2)])
-
-    actuator_force_1 = ActuatorForceGaussianAngled(
-        sigma=0.1, A=1.0, position=pos1, theta=theta1
+    actuator_force_1 = ActuatorForceGaussianV(
+        sigma=0.1, position=np.array([0.0, 0.5])
     )
-    actuator_force_2 = ActuatorForceGaussianAngled(
-        sigma=0.1, A=1.0, position=pos2, theta=theta2
+    actuator_force_2 = ActuatorForceGaussianV(
+        sigma=0.1, position=np.array([0.0, -0.5])
     )
 
-    sensor_feedback = SensorPoint(sensor_type=SENSOR_TYPE.V, position=np.array([2.5, 0]))
+    sensor_feedback = SensorPoint(sensor_type=SENSOR_TYPE.V, position=np.array([3.0, 0]))
     sensor_perf_1 = SensorPoint(sensor_type=SENSOR_TYPE.V, position=np.array([3.1, 1]))
     sensor_perf_2 = SensorPoint(sensor_type=SENSOR_TYPE.V, position=np.array([3.1, -1]))
     params_control = flowsolverparameters.ParamControl(
@@ -151,10 +144,10 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
         y_meas = flu.MpiUtils.mpi_broadcast(fs.y_meas)
         t_now = fs.t
         u_ctrl = Kss.step(y=-y_meas[0], dt=fs.params_time.dt)
-        u_ctrl = np.clip(u_ctrl, -2, 2)
+        u_ctrl = np.clip(u_ctrl, -1, 1)
         energy = fs.compute_energy()
         print(f"Step {i}, Energy: {fs.compute_energy():.6f}, Control: {u_ctrl[0]:.4f}")
-        fs.step(u_ctrl=[u_ctrl[0], u_ctrl[0]])
+        fs.step(u_ctrl=[u_ctrl[0], -u_ctrl[0]])
 
     #################################################################
 

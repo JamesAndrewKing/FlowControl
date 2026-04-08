@@ -16,6 +16,7 @@ import flowcontrol.flowsolver as flowsolver
 import utils.utils_extract as flu2
 import utils.utils_flowsolver as flu
 from flowcontrol.flowfield import BoundaryConditions
+from flowcontrol.actuator import ACTUATOR_TYPE
 
 # LOG
 dolfin.set_log_level(dolfin.LogLevel.INFO)  # DEBUG TRACE PROGRESS INFO
@@ -163,7 +164,29 @@ class CylinderFlowSolver(flowsolver.FlowSolver):
             "actuator_lo"
         )
 
-        bcu = [bcu_inlet, bcu_walls, bcu_cylinder, bcu_actuation_up, bcu_actuation_lo]
+        # bcu = [bcu_inlet, bcu_walls, bcu_cylinder, bcu_actuation_up, bcu_actuation_lo]
+
+        bcu = [bcu_inlet, bcu_walls, bcu_cylinder]
+
+        # Only add BCs for actuators of type BC
+        for i, actuator in enumerate(self.params_control.actuator_list):
+            if getattr(actuator, "actuator_type", None) == ACTUATOR_TYPE.BC:
+                if i == 0:
+                    bcu_actuation_up = dolfin.DirichletBC(
+                        self.W.sub(0),
+                        actuator.expression,
+                        self.get_subdomain("actuator_up"),
+                    )
+                    actuator.boundary = self.get_subdomain("actuator_up")
+                    bcu.append(bcu_actuation_up)
+                elif i == 1:
+                    bcu_actuation_lo = dolfin.DirichletBC(
+                        self.W.sub(0),
+                        actuator.expression,
+                        self.get_subdomain("actuator_lo"),
+                    )
+                    actuator.boundary = self.get_subdomain("actuator_lo")
+                    bcu.append(bcu_actuation_lo)
 
         return BoundaryConditions(bcu=bcu, bcp=[])
 

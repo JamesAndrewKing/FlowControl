@@ -70,41 +70,19 @@ def main():
 
     # duplicate actuators (1 top, 1 bottom) but assign same control input to each
     angular_size_deg = 10
-    # actuator_bc_1 = ActuatorBCParabolicV(
-    #     width=ActuatorBCParabolicV.angular_size_deg_to_width(
-    #         angular_size_deg, params_flow.user_data["D"] / 2
-    #     ),
-    #     position_x=0.0,
-    # )
-    # actuator_bc_2 = ActuatorBCParabolicV(
-    #     width=ActuatorBCParabolicV.angular_size_deg_to_width(
-    #         angular_size_deg, params_flow.user_data["D"] / 2
-    #     ),
-    #     position_x=0.0,
-    # )
-
-    actuator_force_1 = ActuatorForceGaussianV(
-        sigma=0.1, position=np.array([0.0, 0.5])
+    actuator_bc_1 = ActuatorBCParabolicV(
+        width=ActuatorBCParabolicV.angular_size_deg_to_width(
+            angular_size_deg, params_flow.user_data["D"] / 2
+        ),
+        position_x=0.0,
     )
-    actuator_force_2 = ActuatorForceGaussianV(
-        sigma=0.1, position=np.array([0.0, -0.5])
+    actuator_bc_2 = ActuatorBCParabolicV(
+        width=ActuatorBCParabolicV.angular_size_deg_to_width(
+            angular_size_deg, params_flow.user_data["D"] / 2
+        ),
+        position_x=0.0,
     )
-    # Angled body force actuators:
-    # actuator_force_1 = ActuatorForceGaussianAngled(
-    #     sigma=0.1,
-    #     A=1.0,
-    #     r=0.6,
-    #     theta=np.deg2rad(70),
-    #     center=np.array([0.0, 0.0])
-    # )
 
-    # # Second dummy actuator because cylinderflowsolver expects two actuators. Only use the first
-    # actuator_force_2 = ActuatorBCParabolicV(
-    #     width=ActuatorBCParabolicV.angular_size_deg_to_width(
-    #         10, params_flow.user_data["D"] / 2
-    #     ),
-    #     position_x=0.0,
-    # )
 
     # sensor_feedback = SensorPoint(sensor_type=SENSOR_TYPE.V, position=np.array([3, 0]))
     sensor_feedback = SensorPoint(sensor_type=SENSOR_TYPE.V, position=np.array([3.0, 0]))
@@ -112,7 +90,7 @@ def main():
     sensor_perf_2 = SensorPoint(sensor_type=SENSOR_TYPE.V, position=np.array([3.1, -1]))
     params_control = flowsolverparameters.ParamControl(
         sensor_list=[sensor_feedback, sensor_perf_1, sensor_perf_2],
-        actuator_list=[actuator_force_1, actuator_force_2],
+        actuator_list=[actuator_bc_1, actuator_bc_2],
     )
 
     params_ic = flowsolverparameters.ParamIC(
@@ -132,6 +110,40 @@ def main():
     )
 
     logger.info("__init__(): successful!")
+
+    ##########################################################
+    # Extract Actuator Boundary DOFs
+    ##########################################################
+    print("Extracting actuator boundary DOFs...")
+    
+    # Get actuator boundary conditions in mixed space (W)
+    bcu_actuation_up = dolfin.DirichletBC(
+        fs.W.sub(0), dolfin.Constant((0, 0)), fs.get_subdomain("actuator_up"))
+    bcu_actuation_lo = dolfin.DirichletBC(
+        fs.W.sub(0), dolfin.Constant((0, 0)), fs.get_subdomain("actuator_lo"))
+    
+    actuator_up_dofs_W = list(bcu_actuation_up.get_boundary_values().keys())
+    actuator_lo_dofs_W = list(bcu_actuation_lo.get_boundary_values().keys())
+    actuator_dofs_W = np.array(actuator_up_dofs_W + actuator_lo_dofs_W)
+    
+    # Get actuator boundary conditions in velocity space (V)
+    bcu_actuation_up_V = dolfin.DirichletBC(
+        fs.V, dolfin.Constant((0, 0)), fs.get_subdomain("actuator_up"))
+    bcu_actuation_lo_V = dolfin.DirichletBC(
+        fs.V, dolfin.Constant((0, 0)), fs.get_subdomain("actuator_lo"))
+
+    actuator_up_dofs_V = list(bcu_actuation_up_V.get_boundary_values().keys())
+    actuator_lo_dofs_V = list(bcu_actuation_lo_V.get_boundary_values().keys())
+    actuator_dofs_V = np.array(actuator_up_dofs_V + actuator_lo_dofs_V)
+
+    print(f"Actuator up DOFs W: {len(actuator_up_dofs_W)}")
+    print(f"Actuator lo DOFs W: {len(actuator_lo_dofs_W)}")
+    print(f"Total actuator DOFs in W space: {len(actuator_dofs_W)}")
+    print(f"Actuator up DOFs V: {len(actuator_up_dofs_V)}")
+    print(f"Actuator lo DOFs V: {len(actuator_lo_dofs_V)}")
+    print(f"Total actuator DOFs in V space: {len(actuator_dofs_V)}")
+
+    V_to_W_vel_mapping = np.load(str(cwd / 'data_output' / 'V_to_W_vel_mapping.npy'))
 
     # logger.info("Compute steady state...")
     # # U00 = dolfin.Function(fs.V)
@@ -166,37 +178,34 @@ def main():
 
     # Assemble B (sum if multiple actuators with same input)
     # --- Velocity DOF mapping ---
-    V_to_W_vel_mapping = np.load(str(cwd / 'data_output' / 'V_to_W_vel_mapping.npy'))
-    v = dolfin.TestFunction(fs.V)
-    actuator_force_1.expression.u_ctrl = 1.0
-    actuator_func_1 = dolfin.interpolate(actuator_force_1.expression, fs.V)
-    forcing_vec_1 = dolfin.assemble(dolfin.inner(actuator_func_1, v) * dolfin.dx)
-    actuator_profile_vels_1 = forcing_vec_1.get_local()
+    # V_to_W_vel_mapping = np.load(str(cwd / 'data_output' / 'V_to_W_vel_mapping.npy'))
+    # v = dolfin.TestFunction(fs.V)
+    # actuator_force_1.expression.u_ctrl = 1.0
+    # actuator_func_1 = dolfin.interpolate(actuator_force_1.expression, fs.V)
+    # forcing_vec_1 = dolfin.assemble(dolfin.inner(actuator_func_1, v) * dolfin.dx)
+    # actuator_profile_vels_1 = forcing_vec_1.get_local()
 
-    actuator_force_2.expression.u_ctrl = -1.0
-    actuator_func_2 = dolfin.interpolate(actuator_force_2.expression, fs.V)
-    forcing_vec_2 = dolfin.assemble(dolfin.inner(actuator_func_2, v) * dolfin.dx)
-    actuator_profile_vels_2 = forcing_vec_2.get_local()
+    # actuator_force_2.expression.u_ctrl = -1.0
+    # actuator_func_2 = dolfin.interpolate(actuator_force_2.expression, fs.V)
+    # forcing_vec_2 = dolfin.assemble(dolfin.inner(actuator_func_2, v) * dolfin.dx)
+    # actuator_profile_vels_2 = forcing_vec_2.get_local()
 
-    B = np.zeros(dim)
-    B[V_to_W_vel_mapping] = actuator_profile_vels_1 + actuator_profile_vels_2
+    # B = np.zeros(dim)
+    # B[V_to_W_vel_mapping] = actuator_profile_vels_1 + actuator_profile_vels_2
     # B[V_to_W_vel_mapping] = actuator_profile_vels_1
+    # B = actuator_dofs_W
+    
+
 
     # Find sensor DoF and assemble C
-    sensor_position = np.array([3.0, 0.0])
-    dof_index = find_sensor_dof_index(fs.V, sensor_position)
-    C = np.zeros(dim)
-    C[V_to_W_vel_mapping[dof_index]] = 1.0
+    # sensor_position = np.array([3.0, 0.0])
+    # dof_index = find_sensor_dof_index(fs.V, sensor_position)
+    # C = np.zeros(dim)
+    # C[V_to_W_vel_mapping[dof_index]] = 1.0
 
-    def transfer_function(A, E, B, C, s):
-        # s: complex frequency (e.g., s = 1j*omega)
-        M = s * E - A
-        x = spla.spsolve(M, B)
-        return C @ x
-
-    # Example: compute at s = 1j*omega
-    omega = 1.0
-    s = 1j * omega
+    # Partition DOFs
+    all_dofs = np.arange(dim)
+    interior_dofs = np.setdiff1d(all_dofs, actuator_dofs_W)
 
     def fenics_to_csr(A):
         """Convert FEniCS PETScMatrix to SciPy CSR matrix."""
@@ -209,19 +218,47 @@ def main():
     A_csr = fenics_to_csr(A0)
     E_csr = fenics_to_csr(E)
 
-    # Now you can use complex arithmetic
-    G = transfer_function(A_csr, E_csr, B, C, s)
-    print("Transfer function at s = i*omega:", G)
+    # Partition matrices
+    A_ii = A_csr[interior_dofs[:, None], interior_dofs]
+    A_ib = A_csr[interior_dofs[:, None], actuator_dofs_W]
+    E_ii = E_csr[interior_dofs[:, None], interior_dofs]
+    E_ib = E_csr[interior_dofs[:, None], actuator_dofs_W]
+
+    # B for boundary actuation
+    # B_boundary = np.ones(len(actuator_dofs_W))  # TODO: specify true profile!!!
+    # Get the full B matrix
+    B = opget.get_B()
+
+    # Extract the nonzero entries of B corresponding to the boundary DoFs
+    B_boundary = np.sum(B[actuator_dofs_W], axis=1)
+
+    # Output vector
+    C = opget.get_C()[0,:]
+
+    C_i = C[interior_dofs]
+
+    # Transfer function
+    def boundary_transfer_function(A_ii, E_ii, A_ib, E_ib, B_boundary, C_i, s):
+        # rhs = (A_ib - s * E_ib) @ B_boundary
+        rhs = A_ib @ B_boundary
+        x_i = spla.spsolve(s * E_ii - A_ii, rhs)
+        return C_i @ x_i
+
+    # Example usage
+    omega = 1.0
+    s = 1j * omega
+    G = boundary_transfer_function(A_ii, E_ii, A_ib, E_ib, B_boundary, C_i, s)
+    print("Boundary transfer function at s = i*omega:", G)
 
     # Frequency range (log or linear, as appropriate)
     omega_range = np.logspace(-2, 2, 100)  # e.g., from 0.01 to 100
 
     G_vals = []
     for omega in omega_range:
-        print(omega)
         s = 1j * omega
-        G = transfer_function(A_csr, E_csr, B, C, s)
+        G = boundary_transfer_function(A_ii, E_ii, A_ib, E_ib, B_boundary, C_i, s)
         G_vals.append(G)
+        print(f"Frequency (omega): {omega:.4e}, Transfer Function (G): {G.real:.4e} + {G.imag:.4e}j")
 
     G_vals = np.array(G_vals)
 

@@ -191,24 +191,36 @@ class ActuatorForceGaussianV(Actuator):
 class ActuatorForceGaussianAngled(Actuator):
     sigma: float
     A: float
-    position: np.ndarray  # [x0, y0]
+    r: float
     theta: float
+    center: np.ndarray  # [x_c, y_c]
     actuator_type: ACTUATOR_TYPE = ACTUATOR_TYPE.FORCE
 
     def load_expression(self, flowsolver):
         expr = dolfin.Expression(
             [
                 # x-component
-                "cos_theta * (A/(2*pi*sig*sig)) * exp(-0.5*((x[0]-x0)*(x[0]-x0)+(x[1]-y0)*(x[1]-y0))/(sig*sig))",
+                "cos_theta * (A/(2*pi*sig*sig)) * ("
+                "exp(-0.5*(pow(x[0]-x1,2) + pow(x[1]-y1,2))/(sig*sig))"
+                " - "
+                "exp(-0.5*(pow(x[0]-x2,2) + pow(x[1]-y2,2))/(sig*sig))"
+                ")",
                 # y-component
-                "sin_theta * (A/(2*pi*sig*sig)) * exp(-0.5*((x[0]-x0)*(x[0]-x0)+(x[1]-y0)*(x[1]-y0))/(sig*sig))"
+                "sin_theta * (A/(2*pi*sig*sig)) * ("
+                "exp(-0.5*(pow(x[0]-x1,2) + pow(x[1]-y1,2))/(sig*sig))"
+                " + "
+                "exp(-0.5*(pow(x[0]-x2,2) + pow(x[1]-y2,2))/(sig*sig))"
+                ")"
             ],
             element=flowsolver.V.ufl_element(),
             A=self.A,
             sig=self.sigma,
-            x0=self.position[0], y0=self.position[1],
             cos_theta=np.cos(self.theta),
             sin_theta=np.sin(self.theta),
+            x1=self.center[0] + self.r * np.cos(self.theta),
+            y1=self.center[1] + self.r * np.sin(self.theta),
+            x2=self.center[0] + self.r * np.cos(-self.theta),
+            y2=self.center[1] + self.r * np.sin(-self.theta),
         )
         self.expression = expr
 
