@@ -238,16 +238,19 @@ def main():
     C_i = C[interior_dofs]
 
     # Transfer function
-    def boundary_transfer_function(A_ii, E_ii, A_ib, E_ib, B_boundary, C_i, s):
+    def boundary_transfer_function(A_ii, E_ii, A_ib, E_ib, B_boundary, C_i, s, regularization=1e-8):
         # rhs = (A_ib - s * E_ib) @ B_boundary
         rhs = A_ib @ B_boundary
-        x_i = spla.spsolve(s * E_ii - A_ii, rhs)
+        system_matrix = s * E_ii - A_ii
+        system_matrix += regularization * spr.eye(A_ii.shape[0])
+
+        x_i = spla.spsolve(system_matrix, rhs)
         return C_i @ x_i
 
     # Example usage
     omega = 1.0
     s = 1j * omega
-    G = boundary_transfer_function(A_ii, E_ii, A_ib, E_ib, B_boundary, C_i, s)
+    G = boundary_transfer_function(A_ii, E_ii, A_ib, E_ib, -B_boundary, C_i, s)
     print("Boundary transfer function at s = i*omega:", G)
 
     # Frequency range (log or linear, as appropriate)
@@ -256,7 +259,7 @@ def main():
     G_vals = []
     for omega in omega_range:
         s = 1j * omega
-        G = boundary_transfer_function(A_ii, E_ii, A_ib, E_ib, B_boundary, C_i, s)
+        G = boundary_transfer_function(A_ii, E_ii, A_ib, E_ib, -B_boundary, C_i, s)
         G_vals.append(G)
         print(f"Frequency (omega): {omega:.4e}, Transfer Function (G): {G.real:.4e} + {G.imag:.4e}j")
 

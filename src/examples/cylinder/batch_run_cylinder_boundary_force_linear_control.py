@@ -82,13 +82,18 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     params_restart = flowsolverparameters.ParamRestart(
     )
 
-    # Angled body force actuators:
-
-    actuator_force_1 = ActuatorForceGaussianV(
-        sigma=0.1, position=np.array([0.0, 0.5])
+    angular_size_deg = 10
+    actuator_bc_1 = ActuatorBCParabolicV(
+        width=ActuatorBCParabolicV.angular_size_deg_to_width(
+            angular_size_deg, params_flow.user_data["D"] / 2
+        ),
+        position_x=0.0,
     )
-    actuator_force_2 = ActuatorForceGaussianV(
-        sigma=0.1, position=np.array([0.0, -0.5])
+    actuator_bc_2 = ActuatorBCParabolicV(
+        width=ActuatorBCParabolicV.angular_size_deg_to_width(
+            angular_size_deg, params_flow.user_data["D"] / 2
+        ),
+        position_x=0.0,
     )
 
     sensor_feedback = SensorPoint(sensor_type=SENSOR_TYPE.V, position=np.array([3.0, 0]))
@@ -96,7 +101,7 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     sensor_perf_2 = SensorPoint(sensor_type=SENSOR_TYPE.V, position=np.array([3.1, -1]))
     params_control = flowsolverparameters.ParamControl(
         sensor_list=[sensor_feedback, sensor_perf_1, sensor_perf_2],
-        actuator_list=[actuator_force_1, actuator_force_2],
+        actuator_list=[actuator_bc_1, actuator_bc_2],
     )
     # params_control = flowsolverparameters.ParamControl(
     #     sensor_list=[sensor_feedback, sensor_perf_1, sensor_perf_2],
@@ -138,7 +143,7 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
    
     fs.initialize_time_stepping(ic=None)
 
-    Kss = Controller.from_file(file=cwd / "K_first_try.mat", x0=0)
+    Kss = Controller.from_file(file=cwd / "K_discrete.mat", x0=0)
 
     for i in range(fs.params_time.num_steps):
         y_meas = flu.MpiUtils.mpi_broadcast(fs.y_meas)
@@ -147,7 +152,7 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
         u_ctrl = np.clip(u_ctrl, -1, 1)
         energy = fs.compute_energy()
         print(f"Step {i}, Energy: {fs.compute_energy():.6f}, Control: {u_ctrl[0]:.4f}")
-        fs.step(u_ctrl=[u_ctrl[0], -u_ctrl[0]])
+        fs.step(u_ctrl=[u_ctrl[0], u_ctrl[0]])
 
     #################################################################
 
@@ -165,7 +170,7 @@ if __name__ == "__main__":
     forcing_amplitude = 0.3
     forcing_frequency = 1.0
 
-    forced_dir = base_dir / f"Re{Re}_volume_body_force_h_inf" / "run1"
+    forced_dir = base_dir / f"Re{Re}_boundary_force_h_inf" / "run1"
     forced_dir.mkdir(parents=True, exist_ok=True)
 
     run_forced_simulation(Re, forced_dir, num_steps_forced, forcing_amplitude, forcing_frequency)

@@ -93,6 +93,10 @@ ncont = 1;
 
 [K_hinf, CL, gamma] = hinfsyn(P, nmeas, ncont);
 
+%% =========================================================
+%  CLOSED LOOP
+%% =========================================================
+
 CL_final = feedback(ROM, K_hinf);
 
 p = pole(CL_final);
@@ -102,6 +106,10 @@ disp(p);
 
 disp('H∞ gamma:');
 disp(gamma);
+
+%% =========================================================
+%  PLOTS
+%% =========================================================
 
 figure;
 bode(K_hinf,{1e-2,1e2});
@@ -114,14 +122,3 @@ grid on;
 xlabel('Real');
 ylabel('Imag');
 title('Closed-loop Poles');
-
-%%
-dt = 0.005;
-Kd = c2d(K_hinf, dt, 'tustin');
-
-A = Kd.A;
-B = Kd.B;
-C = Kd.C;
-D = Kd.D;
-
-save('K_discrete.mat','A','B','C','D');

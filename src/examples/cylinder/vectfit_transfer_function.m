@@ -1,5 +1,5 @@
 % --- Define omega_range in rad/s ---
-omega_range = logspace(-2, 2, 100); % 10^-2 to 10^2 rad/s
+omega_range = logspace(-2, 2, 1000); % 10^-2 to 10^2 rad/s
 s = 1j * omega_range;               % Row vector
 
 % --- Load Data (assume data is already in terms of omega) ---
@@ -7,8 +7,8 @@ data_G = load('data_output/nyquist/G_vals.mat');
 G_vals = data_G.G_vals(:).';
 
 % --- Initial Poles for VECTFIT ---
-n_poles_real = 2;
-n_poles_cmplx = 2;
+n_poles_real = 4; % Increased number of real poles
+n_poles_cmplx = 4; % Increased number of complex poles
 init_poles = -logspace(log10(min(omega_range)), log10(max(omega_range)), n_poles_real);
 cplx_freqs = logspace(log10(min(omega_range)), log10(max(omega_range)), n_poles_cmplx);
 for k = 1:n_poles_cmplx
@@ -17,10 +17,10 @@ end
 
 weight = ones(1, length(s));
 
-% --- VECTFIT Options (unchanged) ---
+% --- VECTFIT Options ---
 opts = struct();
 opts.relax = 1;
-opts.stable = 1;
+opts.stable = 1; % Enforce stability
 opts.asymp = 3;
 opts.spy1 = 0;
 opts.spy2 = 0;
@@ -50,20 +50,13 @@ G = force_real_tf(G);
 disp('Fitted transfer function:');
 G
 
-% --- Plot Fit Quality (use omega_range) ---
-figure;
-plot(omega_range, abs(G_vals), 'b', 'DisplayName', 'Original');
-hold on;
-[mag_fit, ~] = bode(G, omega_range);
-plot(omega_range, squeeze(mag_fit), 'r--', 'DisplayName', 'Fitted');
-xlabel('\omega [rad/s]');
-ylabel('|G(j\omega)|');
-legend('Original', 'Fitted');
-title('Fit Quality');
-grid on;
+% --- Check Stability of Fitted Transfer Function ---
+disp('Poles of the fitted transfer function:');
+disp(pole(G));
 
 % --- Weighting Function for Loop Shaping ---
-kW = 1.0; aW = 2.0;
+kW = 0.05; % Adjusted gain
+aW = 0.2; % Adjusted bandwidth
 W = tf([kW*aW^2], [1 2*aW aW^2]);
 Gw = series(G, W);
 
@@ -85,8 +78,6 @@ step(T);
 title('Closed-loop Step Response');
 xlabel('Time');
 ylabel('Output');
-
-disp('Done.');
 
 % Sensitivity and complementary sensitivity
 L = series(K, G);
@@ -149,11 +140,13 @@ legend('|G(j\omega)|','|L(j\omega)|');
 title('Plant vs Open-loop Magnitude');
 grid on;
 
+% --- Discretize Controller ---
 Kd = c2d(K, 0.005, 'tustin');
 Kss = ss(Kd);
 A = Kss.A; B = Kss.B; C = Kss.C; D = Kss.D; Ts = Kss.Ts;
 save('K_first_try.mat', 'A', 'B', 'C', 'D', 'Ts');
 
+% --- Helper Function ---
 function G_real = force_real_tf(G)
     tol = 1e-10;
     G_real = G;
