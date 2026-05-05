@@ -109,7 +109,7 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
     # )
 
     params_ic = flowsolverparameters.ParamIC(
-        xloc=2.0, yloc=0.0, radius=0.5, amplitude=1.0
+        xloc=2.0, yloc=0.0, radius=0.5, amplitude=0.01
     )
 
     fs = CylinderFlowSolver(
@@ -143,7 +143,7 @@ def run_forced_simulation(Re, save_dir, num_steps, forcing_amplitude, forcing_fr
    
     fs.initialize_time_stepping(ic=None)
 
-    Kss = Controller.from_file(file=cwd / "K_discrete.mat", x0=0)
+    Kss = Controller.from_file(file=cwd / "K_tuned_stable.mat", x0=0)
 
     for i in range(fs.params_time.num_steps):
         y_meas = flu.MpiUtils.mpi_broadcast(fs.y_meas)

@@ -68,57 +68,186 @@ rank_obsv = rank(obsv(A_u,C(:,unstable_idx)));
 disp('Observability rank (unstable subspace):');
 disp(rank_obsv);
 
-%% =========================================================
-%  IMPROVED H∞ CONTROLLER DESIGN (STABLE + WELL-SCALED)
-%% =========================================================
+%%
 
-ROM.InputName = 'u';
-ROM.OutputName = 'y';
+% --- 1. Define tunable parameters for the 5th-order controller ---
+% Syntax: realp('name', initial_value)
+% Insert AnalysisPoint at the plant input (control signal)
+AP = AnalysisPoint('LoopIn');
 
-s = tf('s');
+% Connect the AnalysisPoint in series with the plant
+G_with_AP = AP * ROM;
 
-% Target instability region (~0.1–1 rad/s dynamics)
-w0 = 1;
+% Denominator coefficients (a0 to a4)
+% Initialized to 1 as a safe starting point
+a0 = realp('a0', 1);
+a1 = realp('a1', 1);
+a2 = realp('a2', 1);
+a3 = realp('a3', 1);
+a4 = realp('a4', 1);
 
-% Performance weight (moderate, not extreme)
-Wp = (s/w0 + 0.3) / (s/w0 + 3);
+% Numerator coefficients (b1 to b4)
+% Note: b0 is deliberately excluded (kept as 0) to enforce K(0) = 0
+b1 = realp('b1', 0);
+b2 = realp('b2', 0);
+b3 = realp('b3', 0);
+b4 = realp('b4', 0);
 
-% Control effort weight (IMPORTANT: increase damping of solution)
-Wu = 1;
+% --- 2. Construct the observability canonical form matrices ---
+% This perfectly matches Equation (3.41) in the thesis
+L = [0, 0, 0, 0, -a0;
+     1, 0, 0, 0, -a1;
+     0, 1, 0, 0, -a2;
+     0, 0, 1, 0, -a3;
+     0, 0, 0, 1, -a4];
 
-P = augw(ROM, Wp, Wu);
+M = [0; b1; b2; b3; b4];
 
-nmeas = 1;
-ncont = 1;
+N = [0, 0, 0, 0, 1];
 
-[K_hinf, CL, gamma] = hinfsyn(P, nmeas, ncont);
+D = 0; % The controller is strictly causal (no direct feedthrough)
 
-%% =========================================================
-%  CLOSED LOOP
-%% =========================================================
+% Create the tunable state-space controller (generalized state-space model)
+K_tune = ss(L, M, N, D);a
+% K_tune = tunableSS('K_tune', 5, 1, 1);
 
-CL_final = feedback(ROM, K_hinf);
+% --- 3. Define the closed-loop system ---
+% The thesis implies standard feedback to stabilize the unstable plant modes.
+% feedback(Plant, Controller, +1/-1). We assume standard negative feedback.
+% CL_tune = feedback(ROM * K_tune, 1); 
+CL_tune = feedback(G_with_AP * K_tune, 1);
 
-p = pole(CL_final);
+% --- 4. Define Tuning Goals ---
+% The thesis requires: "poles of bounded growth rate, i.e. less than -0.03"
+% TuningGoal.Poles(MinDecay, MinDamping, MaxFrequency)
+% A MinDecay of 0.03 forces all closed-loop poles p to have Real(p) < -0.03
+MinDecay = 0.03;
+Req_CL_Poles = TuningGoal.Poles(MinDecay, 0, Inf);
+Req_Margins = TuningGoal.Margins('LoopIn', 2, 20);
+Req_K_Poles = TuningGoal.ControllerPoles('K_tune', -0.01);
 
-disp('Closed-loop poles (corrected H∞ design):');
-disp(p);
+% --- 5. Run SYSTUNE ---
+% Because the optimization is non-convex, using multiple random starting 
+% points is highly recommended to find the best local minimum.
+opt_systune = systuneOptions('RandomStart', 100, 'Display', 'final');
 
-disp('H∞ gamma:');
-disp(gamma);
+disp('Starting structured H-infinity synthesis...');
+% [CL_tuned, fSoft] = systune(CL_tune, Req_CL_Poles, opt_systune);
+% [CL_tuned, fSoft] = systune(CL_tune, [Req_CL_Poles, Req_Margins], opt_systune);
+[CL_tuned, fSoft] = systune(CL_tune, [Req_CL_Poles, Req_Margins], opt_systune);
 
-%% =========================================================
-%  PLOTS
-%% =========================================================
+% --- 6. Extract the tuned controller ---
+% Extract the tuned parameters and substitute them back into our controller block
+tuned_blocks = getBlockValue(CL_tuned);
+K_tuned = replaceBlock(K_tune, tuned_blocks);
+
+% Convert the tunable ss object to a standard numeric ss object
+K_tuned = ss(K_tuned); 
+
+% --- 7. Verification Checks ---
+disp('--- Controller Synthesis Results ---');
+% 1. Check if the controller itself is stable (as requested by the thesis)
+if isstable(K_tuned)
+    disp('Success: The tuned controller is stable.');
+else
+    disp('Warning: The tuned controller is unstable.');
+    disp('You may need to increase the number of RandomStarts in systune.');
+end
+
+% 2. Check the closed-loop poles
+CL_numeric = feedback(ROM * K_tuned, 1);
+max_real_pole = max(real(pole(CL_numeric)));
+fprintf('Maximum real part of closed-loop poles: %.4f (Target < -0.03)\n', max_real_pole);
+
+% Optional: Plot the controller's Bode plot
+%%
+w = logspace(-4, 4, 100); % Frequency grid matching your previous plots
+
+
+[mag_K, phase_K, ~] = bode(K_tuned, w);
+
+% Squeeze to 1D arrays
+mag_K = squeeze(mag_K);
+phase_K = squeeze(phase_K);
+
+% Wrap phase to [-180, 180]
+phase_K_wrapped = mod(phase_K, 360) - 180;
 
 figure;
-bode(K_hinf,{1e-2,1e2});
+subplot(2,1,1);
+semilogx(w, 20*log10(mag_K), 'b', 'LineWidth', 1.5);
 grid on;
-title('Improved H∞ Controller');
+ylabel('Magnitude (dB)');
+title('Bode Plot: Controller Magnitude');
 
-figure;
-plot(real(p), imag(p), 'x');
+subplot(2,1,2);
+semilogx(w, phase_K_wrapped, 'b', 'LineWidth', 1.5);
 grid on;
-xlabel('Real');
-ylabel('Imag');
-title('Closed-loop Poles');
+ylabel('Phase (deg)');
+xlabel('Frequency (rad/s)');
+title('Bode Plot: Controller Phase');
+
+%%
+if isstable(K_tuned) && max_real_pole < -0.03
+    disp('Saving stable controller...');
+    [A,B,C,D] = ssdata(K_tuned);
+    save('K_tuned_stable.mat','A','B','C','D','K_tuned');
+end
+
+% %% =========================================================
+% %  IMPROVED H∞ CONTROLLER DESIGN (STABLE + WELL-SCALED)
+% %% =========================================================
+% 
+% ROM.InputName = 'u';
+% ROM.OutputName = 'y';
+% 
+% s = tf('s');
+% 
+% % Target instability region (~0.1–1 rad/s dynamics)
+% w0 = 1;
+% 
+% % Performance weight (moderate, not extreme)
+% Wp = (s/w0 + 0.3) / (s/w0 + 3);
+% 
+% % Control effort weight (IMPORTANT: increase damping of solution)
+% Wu = 1;
+% 
+% P = augw(ROM, Wp, Wu);
+% 
+% nmeas = 1;
+% ncont = 1;
+% 
+% [K_hinf, CL, gamma] = hinfsyn(P, nmeas, ncont);
+% 
+% CL_final = feedback(ROM, K_hinf);
+% 
+% p = pole(CL_final);
+% 
+% disp('Closed-loop poles (corrected H∞ design):');
+% disp(p);
+% 
+% disp('H∞ gamma:');
+% disp(gamma);
+% 
+% figure;
+% bode(K_hinf,{1e-2,1e2});
+% grid on;
+% title('Improved H∞ Controller');
+% 
+% figure;
+% plot(real(p), imag(p), 'x');
+% grid on;
+% xlabel('Real');
+% ylabel('Imag');
+% title('Closed-loop Poles');
+% 
+% %%
+% dt = 0.005;
+% Kd = c2d(K_hinf, dt, 'tustin');
+% 
+% A = Kd.A;
+% B = Kd.B;
+% C = Kd.C;
+% D = Kd.D;
+% 
+% save('K_discrete.mat','A','B','C','D');
