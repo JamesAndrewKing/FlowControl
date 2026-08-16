@@ -1,0 +1,197 @@
+{
+  "description": "Backward-facing-step mesh-convergence family",
+  "levels": {
+    "coarse": {
+      "filename_stem": "bfs_1",
+      "software": {
+        "gmsh": "4.15.2",
+        "meshio": "5.3.5",
+        "numpy": "2.2.6"
+      },
+      "config": {
+        "level": "coarse",
+        "scale": 2.0,
+        "x_in": -10.0,
+        "x_out": 50.0,
+        "y_bottom": 0.0,
+        "y_step": 1.0,
+        "y_top": 2.0,
+        "actuator_x": -1.0,
+        "actuator_sigma": 0.1,
+        "actuator_half_widths": 4.0,
+        "h_bulk_reference": 0.4,
+        "h_shear_reference": 0.08,
+        "h_wall_reference": 0.02,
+        "h_corner_reference": 0.01
+      },
+      "derived_sizes": {
+        "h_bulk": 0.8,
+        "h_shear": 0.16,
+        "h_wall": 0.04,
+        "h_corner": 0.02,
+        "actuator_left": -1.4,
+        "actuator_right": -0.6
+      },
+      "physical_tags": {
+        "fluid": 1,
+        "inlet": 11,
+        "outlet": 12,
+        "upper_wall": 13,
+        "actuator": 14,
+        "upstream_lower_wall": 15,
+        "step_wall": 16,
+        "downstream_lower_wall": 17
+      },
+      "statistics": {
+        "points": 9644,
+        "triangles": 16238,
+        "boundary_edges": 3048,
+        "domain_area": 110.0,
+        "triangle_area_min": 9.020828245336484e-05,
+        "triangle_area_max": 0.3432053004262026,
+        "edge_length_min": 0.014158454012769233,
+        "edge_length_max": 1.0397065408161565,
+        "quality_min": 0.33695301767921454,
+        "quality_mean": 0.8983641772286803,
+        "quality_p01": 0.5402516564295547,
+        "boundary_lengths": {
+          "inlet": 1.0,
+          "outlet": 2.0,
+          "upper_wall": 59.2,
+          "actuator": 0.7999999999999999,
+          "upstream_lower_wall": 10.0,
+          "step_wall": 1.0,
+          "downstream_lower_wall": 50.0
+        }
+      }
+    },
+    "medium": {
+      "filename_stem": "bfs_2",
+      "software": {
+        "gmsh": "4.15.2",
+        "meshio": "5.3.5",
+        "numpy": "2.2.6"
+      },
+      "config": {
+        "level": "medium",
+        "scale": 1.0,
+        "x_in": -10.0,
+        "x_out": 50.0,
+        "y_bottom": 0.0,
+        "y_step": 1.0,
+        "y_top": 2.0,
+        "actuator_x": -1.0,
+        "actuator_sigma": 0.1,
+        "actuator_half_widths": 4.0,
+        "h_bulk_reference": 0.4,
+        "h_shear_reference": 0.08,
+        "h_wall_reference": 0.02,
+        "h_corner_reference": 0.01
+      },
+      "derived_sizes": {
+        "h_bulk": 0.4,
+        "h_shear": 0.08,
+        "h_wall": 0.02,
+        "h_corner": 0.01,
+        "actuator_left": -1.4,
+        "actuator_right": -0.6
+      },
+      "physical_tags": {
+        "fluid": 1,
+        "inlet": 11,
+        "outlet": 12,
+        "upper_wall": 13,
+        "actuator": 14,
+        "upstream_lower_wall": 15,
+        "step_wall": 16,
+        "downstream_lower_wall": 17
+      },
+      "statistics": {
+        "points": 34384,
+        "triangles": 62672,
+        "boundary_edges": 6094,
+        "domain_area": 110.0,
+        "triangle_area_min": 3.022697995961897e-05,
+        "triangle_area_max": 0.08821065456311156,
+        "edge_length_min": 0.007952171025961912,
+        "edge_length_max": 0.4652851183382259,
+        "quality_min": 0.45912599292881007,
+        "quality_mean": 0.9559733540729368,
+        "quality_p01": 0.704751377948973,
+        "boundary_lengths": {
+          "inlet": 1.0,
+          "outlet": 2.0,
+          "upper_wall": 59.2,
+          "actuator": 0.7999999999999999,
+          "upstream_lower_wall": 10.0,
+          "step_wall": 1.0,
+          "downstream_lower_wall": 50.0
+        }
+      }
+    },
+    "fine": {
+      "filename_stem": "bfs_3",
+      "software": {
+        "gmsh": "4.15.2",
+        "meshio": "5.3.5",
+        "numpy": "2.2.6"
+      },
+      "config": {
+        "level": "fine",
+        "scale": 0.5,
+        "x_in": -10.0,
+        "x_out": 50.0,
+        "y_bottom": 0.0,
+        "y_step": 1.0,
+        "y_top": 2.0,
+        "actuator_x": -1.0,
+        "actuator_sigma": 0.1,
+        "actuator_half_widths": 4.0,
+        "h_bulk_reference": 0.4,
+        "h_shear_reference": 0.08,
+        "h_wall_reference": 0.02,
+        "h_corner_reference": 0.01
+      },
+      "derived_sizes": {
+        "h_bulk": 0.2,
+        "h_shear": 0.04,
+        "h_wall": 0.01,
+        "h_corner": 0.005,
+        "actuator_left": -1.4,
+        "actuator_right": -0.6
+      },
+      "physical_tags": {
+        "fluid": 1,
+        "inlet": 11,
+        "outlet": 12,
+        "upper_wall": 13,
+        "actuator": 14,
+        "upstream_lower_wall": 15,
+        "step_wall": 16,
+        "downstream_lower_wall": 17
+      },
+      "statistics": {
+        "points": 126699,
+        "triangles": 241230,
+        "boundary_edges": 12166,
+        "domain_area": 110.0,
+        "triangle_area_min": 6.294760769314008e-06,
+        "triangle_area_max": 0.023129003171027868,
+        "edge_length_min": 0.0032931702398660188,
+        "edge_length_max": 0.2557781354021487,
+        "quality_min": 0.5085442900029222,
+        "quality_mean": 0.9756809576338717,
+        "quality_p01": 0.8135207046982144,
+        "boundary_lengths": {
+          "inlet": 1.0,
+          "outlet": 2.0,
+          "upper_wall": 59.2,
+          "actuator": 0.7999999999999999,
+          "upstream_lower_wall": 10.0,
+          "step_wall": 1.0,
+          "downstream_lower_wall": 50.0
+        }
+      }
+    }
+  }
+}
