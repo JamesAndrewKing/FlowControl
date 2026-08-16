@@ -192,6 +192,78 @@
           "downstream_lower_wall": 50.0
         }
       }
+    },
+    "verification": {
+      "filename_stem": "bfs_4",
+      "software": {
+        "gmsh": "4.15.2",
+        "meshio": "5.3.5",
+        "numpy": "2.2.6"
+      },
+      "config": {
+        "level": "verification",
+        "scale": 0.5,
+        "x_in": -10.0,
+        "x_out": 50.0,
+        "y_bottom": 0.0,
+        "y_step": 1.0,
+        "y_top": 2.0,
+        "actuator_x": -1.0,
+        "actuator_sigma": 0.1,
+        "actuator_half_widths": 4.0,
+        "h_bulk_reference": 0.4,
+        "h_shear_reference": 0.08,
+        "h_wall_reference": 0.02,
+        "h_corner_reference": 0.01,
+        "target_reattachment": true,
+        "reattachment_x_min": 7.0,
+        "reattachment_x_max": 15.0,
+        "reattachment_normal_extent": 0.4,
+        "h_reattachment_wall": 0.005,
+        "h_reattachment_core": 0.02
+      },
+      "derived_sizes": {
+        "h_bulk": 0.2,
+        "h_shear": 0.04,
+        "h_wall": 0.01,
+        "h_corner": 0.005,
+        "h_reattachment_wall": 0.005,
+        "h_reattachment_core": 0.02,
+        "actuator_left": -1.4,
+        "actuator_right": -0.6
+      },
+      "physical_tags": {
+        "fluid": 1,
+        "inlet": 11,
+        "outlet": 12,
+        "upper_wall": 13,
+        "actuator": 14,
+        "upstream_lower_wall": 15,
+        "step_wall": 16,
+        "downstream_lower_wall": 17
+      },
+      "statistics": {
+        "points": 202867,
+        "triangles": 392715,
+        "boundary_edges": 13017,
+        "domain_area": 110.00000000000001,
+        "triangle_area_min": 4.885428943115918e-06,
+        "triangle_area_max": 0.0009970006931840285,
+        "edge_length_min": 0.0030843918260480183,
+        "edge_length_max": 0.05132662159680292,
+        "quality_min": 0.6214691104144344,
+        "quality_mean": 0.9874072141891596,
+        "quality_p01": 0.8531624746248481,
+        "boundary_lengths": {
+          "inlet": 1.0,
+          "outlet": 2.0,
+          "upper_wall": 59.2,
+          "actuator": 0.7999999999999999,
+          "upstream_lower_wall": 10.0,
+          "step_wall": 1.0,
+          "downstream_lower_wall": 50.0
+        }
+      }
     }
   }
 }

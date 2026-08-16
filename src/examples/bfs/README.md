@@ -27,6 +27,7 @@ The numerical names follow the lid-cavity example convention:
 | `bfs_1` | coarse |
 | `bfs_2` | medium |
 | `bfs_3` | fine |
+| `bfs_4` | targeted reattachment verification |
 
 For each level, `data_input` contains:
 
@@ -53,8 +54,10 @@ family has 16,238, 62,672, and 241,230 triangles from coarse to fine.
 | 17 | `downstream_lower_wall` | 50 |
 
 The generator checks these measures, rejects zero-area triangles, and records
-element-quality statistics. All generated volume and facet files have also been
-read successfully with the project's legacy FEniCS 2019.1 environment.
+element-quality statistics. The three production candidates have 16,238,
+62,672, and 241,230 triangles; the targeted `bfs_4` verification mesh has
+392,715 triangles. All generated volume and facet files have also been read
+successfully with the project's legacy FEniCS 2019.1 environment.
 
 ## Steady CFD and mesh convergence
 
@@ -82,6 +85,22 @@ shear, common-point samples, mass and nonlinear-residual diagnostics, and a
 manifest. The campaign summary compares velocity, kinetic energy, and primary
 reattachment location against the next finer mesh using the predeclared 0.5%
 threshold.
+
+`bfs_4` is not a globally finer production level. It retains the `bfs_3`
+resolution away from the reattachment region, halves the lower-wall target
+size over `7 <= x <= 15`, grades that refinement through the first `0.4h`
+off the wall, and extends the fine shear-layer corridor down toward the wall.
+Generate it alone with `--levels verification`; it is intended to decide
+whether `bfs_3` satisfies the wall-shear tolerance without paying for uniform
+refinement of the full `60h`-long domain.
+
+The completed `bfs_3` to `bfs_4` comparison passes the `0.5%` criterion at
+`a = -0.01, 0, 0.01`. The largest lower-wall-shear change is `0.106%`, and the
+largest common-point velocity change is `0.021%`. Therefore `bfs_3` is the
+selected production mesh and `bfs_4` is retained only as its verification
+mesh. The complete numerical comparison is written to
+`data/bfs/mesh_convergence/mesh_convergence_summary.json` in the research-data
+repository.
 
 After choosing a mesh, verify a checkpoint against the library's actual
 perturbation time-stepper with:

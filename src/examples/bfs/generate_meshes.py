@@ -67,6 +67,12 @@ class MeshConfig:
     h_shear_reference: float = 0.08
     h_wall_reference: float = 0.02
     h_corner_reference: float = 0.01
+    target_reattachment: bool = False
+    reattachment_x_min: float = 7.0
+    reattachment_x_max: float = 15.0
+    reattachment_normal_extent: float = 0.4
+    h_reattachment_wall: float = 0.005
+    h_reattachment_core: float = 0.02
 
     @property
     def actuator_left(self) -> float:
@@ -97,12 +103,14 @@ LEVELS = {
     "coarse": 2.0,
     "medium": 1.0,
     "fine": 0.5,
+    "verification": 0.5,
 }
 
 MESH_STEMS = {
     "coarse": "bfs_1",
     "medium": "bfs_2",
     "fine": "bfs_3",
+    "verification": "bfs_4",
 }
 
 
@@ -120,6 +128,12 @@ def _build_geometry(config: MeshConfig) -> dict[str, list[int]]:
         "inlet_lower": geo.addPoint(config.x_in, config.y_step, 0.0),
         "step_edge": geo.addPoint(0.0, config.y_step, 0.0),
         "step_bottom": geo.addPoint(0.0, config.y_bottom, 0.0),
+        "reattachment_left": geo.addPoint(
+            config.reattachment_x_min, config.y_bottom, 0.0
+        ),
+        "reattachment_right": geo.addPoint(
+            config.reattachment_x_max, config.y_bottom, 0.0
+        ),
         "outlet_lower": geo.addPoint(config.x_out, config.y_bottom, 0.0),
         "outlet_upper": geo.addPoint(config.x_out, config.y_top, 0.0),
         "actuator_right": geo.addPoint(config.actuator_right, config.y_top, 0.0),
@@ -130,7 +144,15 @@ def _build_geometry(config: MeshConfig) -> dict[str, list[int]]:
     curve = {
         "upstream_lower_wall": geo.addLine(point["inlet_lower"], point["step_edge"]),
         "step_wall": geo.addLine(point["step_edge"], point["step_bottom"]),
-        "downstream_lower_wall": geo.addLine(point["step_bottom"], point["outlet_lower"]),
+        "downstream_lower_wall_left": geo.addLine(
+            point["step_bottom"], point["reattachment_left"]
+        ),
+        "reattachment_lower_wall": geo.addLine(
+            point["reattachment_left"], point["reattachment_right"]
+        ),
+        "downstream_lower_wall_right": geo.addLine(
+            point["reattachment_right"], point["outlet_lower"]
+        ),
         "outlet": geo.addLine(point["outlet_lower"], point["outlet_upper"]),
         "upper_wall_right": geo.addLine(point["outlet_upper"], point["actuator_right"]),
         "actuator": geo.addLine(point["actuator_right"], point["actuator_left"]),
@@ -149,7 +171,11 @@ def _build_geometry(config: MeshConfig) -> dict[str, list[int]]:
         "actuator": [curve["actuator"]],
         "upstream_lower_wall": [curve["upstream_lower_wall"]],
         "step_wall": [curve["step_wall"]],
-        "downstream_lower_wall": [curve["downstream_lower_wall"]],
+        "downstream_lower_wall": [
+            curve["downstream_lower_wall_left"],
+            curve["reattachment_lower_wall"],
+            curve["downstream_lower_wall_right"],
+        ],
     }
     _add_physical_group(2, groups["fluid"], "fluid")
     for name in PHYSICAL_TAGS:
@@ -157,6 +183,7 @@ def _build_geometry(config: MeshConfig) -> dict[str, list[int]]:
             _add_physical_group(1, groups[name], name)
 
     groups["step_edge_point"] = [point["step_edge"]]
+    groups["reattachment_lower_wall"] = [curve["reattachment_lower_wall"]]
     return groups
 
 
@@ -205,8 +232,57 @@ def _add_mesh_fields(config: MeshConfig, groups: dict[str, list[int]]) -> None:
     gmsh.model.mesh.field.setNumber(shear, "YMax", 1.30)
     gmsh.model.mesh.field.setNumber(shear, "Thickness", 0.30)
 
+    fields = [wall, corner, shear]
+    if config.target_reattachment:
+        distance_reattachment = gmsh.model.mesh.field.add("Distance")
+        gmsh.model.mesh.field.setNumbers(
+            distance_reattachment,
+            "CurvesList",
+            groups["reattachment_lower_wall"],
+        )
+        gmsh.model.mesh.field.setNumber(
+            distance_reattachment, "Sampling", 1000
+        )
+
+        reattachment_wall = gmsh.model.mesh.field.add("Threshold")
+        gmsh.model.mesh.field.setNumber(
+            reattachment_wall, "InField", distance_reattachment
+        )
+        gmsh.model.mesh.field.setNumber(
+            reattachment_wall, "SizeMin", config.h_reattachment_wall
+        )
+        gmsh.model.mesh.field.setNumber(
+            reattachment_wall, "SizeMax", config.h_shear
+        )
+        gmsh.model.mesh.field.setNumber(reattachment_wall, "DistMin", 0.02)
+        gmsh.model.mesh.field.setNumber(
+            reattachment_wall,
+            "DistMax",
+            config.reattachment_normal_extent,
+        )
+
+        descending_shear = gmsh.model.mesh.field.add("Box")
+        gmsh.model.mesh.field.setNumber(
+            descending_shear, "VIn", config.h_reattachment_core
+        )
+        gmsh.model.mesh.field.setNumber(
+            descending_shear, "VOut", config.h_bulk
+        )
+        gmsh.model.mesh.field.setNumber(
+            descending_shear, "XMin", config.reattachment_x_min - 2.0
+        )
+        gmsh.model.mesh.field.setNumber(
+            descending_shear, "XMax", config.reattachment_x_max
+        )
+        gmsh.model.mesh.field.setNumber(
+            descending_shear, "YMin", config.y_bottom
+        )
+        gmsh.model.mesh.field.setNumber(descending_shear, "YMax", 0.75)
+        gmsh.model.mesh.field.setNumber(descending_shear, "Thickness", 0.30)
+        fields.extend([reattachment_wall, descending_shear])
+
     combined = gmsh.model.mesh.field.add("Min")
-    gmsh.model.mesh.field.setNumbers(combined, "FieldsList", [wall, corner, shear])
+    gmsh.model.mesh.field.setNumbers(combined, "FieldsList", fields)
     gmsh.model.mesh.field.setAsBackgroundMesh(combined)
 
 
@@ -361,6 +437,16 @@ def generate_one(config: MeshConfig, output_dir: Path) -> dict:
             "h_shear": config.h_shear,
             "h_wall": config.h_wall,
             "h_corner": config.h_corner,
+            "h_reattachment_wall": (
+                config.h_reattachment_wall
+                if config.target_reattachment
+                else None
+            ),
+            "h_reattachment_core": (
+                config.h_reattachment_core
+                if config.target_reattachment
+                else None
+            ),
             "actuator_left": config.actuator_left,
             "actuator_right": config.actuator_right,
         },
@@ -393,17 +479,23 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = _parse_args()
-    manifest = {
-        "description": "Backward-facing-step mesh-convergence family",
-        "levels": {},
-    }
+    manifest_path = args.output_dir / "bfs_mesh_manifest.json"
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text())
+    else:
+        manifest = {
+            "description": "Backward-facing-step mesh-convergence family",
+            "levels": {},
+        }
     for level in args.levels:
         print(f"Generating {MESH_STEMS[level]} ({level})")
-        config = MeshConfig(level=level, scale=LEVELS[level])
+        config = MeshConfig(
+            level=level,
+            scale=LEVELS[level],
+            target_reattachment=level == "verification",
+        )
         manifest["levels"][level] = generate_one(config, args.output_dir)
-    (args.output_dir / "bfs_mesh_manifest.json").write_text(
-        json.dumps(manifest, indent=2) + "\n"
-    )
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
 
 
 if __name__ == "__main__":

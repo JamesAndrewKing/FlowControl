@@ -138,6 +138,61 @@ def _solve_actuation_path(
     return history
 
 
+def _solve_from_mesh_checkpoint(
+    fs,
+    campaign_root: Path,
+    source_mesh: str,
+) -> list[dict]:
+    """Interpolate a converged zero-control state onto a different mesh."""
+
+    source_root = campaign_root / source_mesh
+    source_run = source_root / _actuation_slug(0.0)
+    with (source_run / "manifest.json").open() as stream:
+        source_manifest = json.load(stream)
+    if float(source_manifest["reynolds"]) != float(fs.params_flow.Re):
+        raise ValueError("Source and target Reynolds numbers must match")
+
+    source = make_bfs_solver(
+        mesh_name=source_mesh,
+        reynolds=fs.params_flow.Re,
+        output_dir=source_root / "_interpolation_scratch",
+        save_every=0,
+        verbose=0,
+    )
+    source.load_steady_state(
+        [source_run / "steady" / "U0.xdmf", source_run / "steady" / "P0.xdmf"]
+    )
+    velocity = dolfin.Function(fs.V)
+    pressure = dolfin.Function(fs.P)
+    dolfin.LagrangeInterpolator.interpolate(velocity, source.fields.U0)
+    dolfin.LagrangeInterpolator.interpolate(pressure, source.fields.P0)
+    initial_guess = fs.merge(velocity, pressure)
+    del source, velocity, pressure
+    gc.collect()
+
+    try:
+        _newton(fs, 0.0, initial_guess)
+        method = "nonmatching interpolation + Newton"
+    except RuntimeError:
+        LOGGER.warning("Interpolated Newton solve failed; applying Picard fallback")
+        fs.compute_steady_state(
+            method="picard",
+            max_iter=20,
+            tol=1e-8,
+            u_ctrl=[0.0],
+            initial_guess=initial_guess,
+        )
+        _newton(fs, 0.0, fs.fields.UP0)
+        method = "nonmatching interpolation + Picard+Newton fallback"
+    return [
+        {
+            "parameter": "mesh_restart",
+            "value": source_mesh,
+            "method": method,
+        }
+    ]
+
+
 def run(args) -> None:
     output_root = Path(args.output_root).expanduser().resolve()
     campaign_root = output_root / "mesh_convergence"
@@ -145,8 +200,9 @@ def run(args) -> None:
     for mesh_name in args.meshes:
         mesh_root = campaign_root / mesh_name
         scratch = mesh_root / "_solver_scratch"
+        use_checkpoint = args.reuse_zero or args.restart_from_mesh is not None
         initial_reynolds = (
-            args.reynolds_path[-1] if args.reuse_zero else args.reynolds_path[0]
+            args.reynolds_path[-1] if use_checkpoint else args.reynolds_path[0]
         )
         fs = make_bfs_solver(
             mesh_name=mesh_name,
@@ -159,7 +215,11 @@ def run(args) -> None:
         with (mesh_root / "setup_validation.json").open("w") as stream:
             json.dump(setup, stream, indent=2, sort_keys=True)
 
-        if args.reuse_zero:
+        if args.restart_from_mesh is not None:
+            history_re = _solve_from_mesh_checkpoint(
+                fs, campaign_root, args.restart_from_mesh
+            )
+        elif args.reuse_zero:
             zero_checkpoint = mesh_root / _actuation_slug(0.0) / "steady"
             fs.load_steady_state(
                 [zero_checkpoint / "U0.xdmf", zero_checkpoint / "P0.xdmf"]
@@ -208,8 +268,9 @@ def run(args) -> None:
         del fs
         gc.collect()
 
+    summary_meshes = args.summary_meshes or args.meshes
     discovered_runs: dict[str, list[Path]] = {}
-    for mesh_name in args.meshes:
+    for mesh_name in summary_meshes:
         for manifest_path in (campaign_root / mesh_name).glob("a_*/manifest.json"):
             with manifest_path.open() as stream:
                 actuation = str(json.load(stream)["actuation"])
@@ -220,9 +281,9 @@ def run(args) -> None:
         "comparisons": {},
     }
     for actuation, run_dirs in discovered_runs.items():
-        mesh_order = {name: index for index, name in enumerate(args.meshes)}
+        mesh_order = {name: index for index, name in enumerate(summary_meshes)}
         run_dirs.sort(key=lambda path: mesh_order[path.parent.name])
-        if len(run_dirs) != len(args.meshes):
+        if len(run_dirs) != len(summary_meshes):
             continue
         comparisons = compare_run_directories(run_dirs)
         for comparison in comparisons:
@@ -280,9 +341,21 @@ def parse_args():
         action="store_true",
         help="Load each existing zero-actuation checkpoint instead of recomputing it",
     )
+    parser.add_argument(
+        "--restart-from-mesh",
+        help="Interpolate an existing zero-control checkpoint from this mesh",
+    )
+    parser.add_argument(
+        "--summary-meshes",
+        nargs="+",
+        help="Ordered mesh list used to rebuild the convergence summary",
+    )
     parser.add_argument("--acceptance-threshold", type=float, default=0.005)
     parser.add_argument("--verbose", type=int, default=1)
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.reuse_zero and args.restart_from_mesh is not None:
+        parser.error("--reuse-zero and --restart-from-mesh are mutually exclusive")
+    return args
 
 
 if __name__ == "__main__":
