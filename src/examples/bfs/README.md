@@ -5,6 +5,10 @@ for the two-dimensional, expansion-ratio-two backward-facing-step benchmark.
 The step height, peak inlet speed, and nominal Reynolds number are `h = 1`,
 `U_inf = 1`, and `Re = 500`.
 
+The domain extends from `x = -10` to `x = 35`. Blackburn, Barkley & Sherwin
+(2008) found that reducing the downstream length from `50h` to `35h` changed
+the two-dimensional transient growth at `t = 60` by only `0.02%` at `Re = 500`.
+
 ## Generate
 
 From the FlowControl repository root, in an environment containing Gmsh and
@@ -38,25 +42,25 @@ For each level, `data_input` contains:
 - `bfs_<n>_metadata.json`: geometry, target sizes, tags, and quality data.
 
 `bfs_mesh_manifest.json` collects all level metadata. The current generated
-family has 16,238, 62,672, and 241,230 triangles from coarse to fine.
+family has 13,314, 50,038, and 193,665 triangles from coarse to fine.
 
 ## Physical tags
 
 | Tag | Name | Expected length/area |
 | ---: | --- | ---: |
-| 1 | `fluid` | area 110 |
+| 1 | `fluid` | area 80 |
 | 11 | `inlet` | 1 |
 | 12 | `outlet` | 2 |
-| 13 | `upper_wall` | 59.2 |
+| 13 | `upper_wall` | 44.2 |
 | 14 | `actuator` | 0.8 |
 | 15 | `upstream_lower_wall` | 10 |
 | 16 | `step_wall` | 1 |
-| 17 | `downstream_lower_wall` | 50 |
+| 17 | `downstream_lower_wall` | 35 |
 
 The generator checks these measures, rejects zero-area triangles, and records
-element-quality statistics. The three production candidates have 16,238,
-62,672, and 241,230 triangles; the targeted `bfs_4` verification mesh has
-392,715 triangles. All generated volume and facet files have also been read
+element-quality statistics. The three production candidates have 13,314,
+50,038, and 193,665 triangles; the targeted `bfs_4` verification mesh has
+308,521 triangles. All generated volume and facet files have also been read
 successfully with the project's legacy FEniCS 2019.1 environment.
 
 ## Steady CFD and mesh convergence
@@ -92,13 +96,27 @@ size over `7 <= x <= 15`, grades that refinement through the first `0.4h`
 off the wall, and extends the fine shear-layer corridor down toward the wall.
 Generate it alone with `--levels verification`; it is intended to decide
 whether `bfs_3` satisfies the wall-shear tolerance without paying for uniform
-refinement of the full `60h`-long domain.
+refinement of the full `45h`-long domain.
 
-The completed `bfs_3` to `bfs_4` comparison passes the `0.5%` criterion at
-`a = -0.01, 0, 0.01`. The largest lower-wall-shear change is `0.106%`, and the
-largest common-point velocity change is `0.021%`. Therefore `bfs_3` is the
-selected production mesh and `bfs_4` is retained only as its verification
-mesh. The complete numerical comparison is written to
+## Complete example
+
+First compute the steady state at `Re = 500` by continuation:
+
+```bash
+PYTHONPATH=src python src/examples/bfs/compute_steady_state_increasing_Re.py
+```
+
+Then run the short unactuated time-domain example:
+
+```bash
+PYTHONPATH=src python src/examples/bfs/run_bfs_example.py
+```
+
+On the former `x = 50` domain, the completed `bfs_3` to `bfs_4` comparison
+passed the `0.5%` criterion at `a = -0.01, 0, 0.01`; its largest
+lower-wall-shear and common-point velocity changes were `0.106%` and `0.021%`.
+The shortened-domain meshes must be recomputed before those numerical results
+are treated as current. The comparison is written to
 `data/bfs/mesh_convergence/mesh_convergence_summary.json` in the research-data
 repository.
 

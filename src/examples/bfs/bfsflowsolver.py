@@ -15,7 +15,7 @@ from flowcontrol.flowfield import BoundaryConditions
 
 GEOMETRY = {
     "x_in": -10.0,
-    "x_out": 50.0,
+    "x_out": 35.0,
     "y_bottom": 0.0,
     "y_step": 1.0,
     "y_top": 2.0,
@@ -183,6 +183,8 @@ def make_bfs_solver(
     mesh_name: str = "bfs_2",
     reynolds: float = 500.0,
     output_dir: Path | str | None = None,
+    num_steps: int = 1,
+    dt: float = 0.005,
     save_every: int = 0,
     verbose: int = 1,
 ) -> BFSFlowSolver:
@@ -196,7 +198,9 @@ def make_bfs_solver(
 
     params_flow = flowsolverparameters.ParamFlow(Re=reynolds, uinf=1.0)
     params_flow.user_data["D"] = 1.0
-    params_time = flowsolverparameters.ParamTime(num_steps=1, dt=0.005, Tstart=0.0)
+    params_time = flowsolverparameters.ParamTime(
+        num_steps=num_steps, dt=dt, Tstart=0.0
+    )
     params_save = flowsolverparameters.ParamSave(
         save_every=save_every, path_out=output_dir
     )
@@ -238,3 +242,9 @@ def make_bfs_solver(
         params_ic=params_ic,
         verbose=verbose,
     )
+
+
+if __name__ == "__main__":
+    from examples.bfs import run_bfs_example
+
+    run_bfs_example.main()

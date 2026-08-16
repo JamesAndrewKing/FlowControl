@@ -1,7 +1,7 @@
 {
   "filename_stem": "bfs_2",
   "software": {
-    "gmsh": "4.15.2",
+    "gmsh": "4.13.1",
     "meshio": "5.3.5",
     "numpy": "2.2.6"
   },
@@ -9,7 +9,7 @@
     "level": "medium",
     "scale": 1.0,
     "x_in": -10.0,
-    "x_out": 50.0,
+    "x_out": 35.0,
     "y_bottom": 0.0,
     "y_step": 1.0,
     "y_top": 2.0,
@@ -19,13 +19,21 @@
     "h_bulk_reference": 0.4,
     "h_shear_reference": 0.08,
     "h_wall_reference": 0.02,
-    "h_corner_reference": 0.01
+    "h_corner_reference": 0.01,
+    "target_reattachment": false,
+    "reattachment_x_min": 7.0,
+    "reattachment_x_max": 15.0,
+    "reattachment_normal_extent": 0.4,
+    "h_reattachment_wall": 0.005,
+    "h_reattachment_core": 0.02
   },
   "derived_sizes": {
     "h_bulk": 0.4,
     "h_shear": 0.08,
     "h_wall": 0.02,
     "h_corner": 0.01,
+    "h_reattachment_wall": null,
+    "h_reattachment_core": null,
     "actuator_left": -1.4,
     "actuator_right": -0.6
   },
@@ -40,25 +48,25 @@
     "downstream_lower_wall": 17
   },
   "statistics": {
-    "points": 34384,
-    "triangles": 62672,
-    "boundary_edges": 6094,
-    "domain_area": 110.0,
-    "triangle_area_min": 3.022697995961897e-05,
-    "triangle_area_max": 0.08821065456311156,
-    "edge_length_min": 0.007952171025961912,
-    "edge_length_max": 0.4652851183382259,
-    "quality_min": 0.45912599292881007,
-    "quality_mean": 0.9559733540729368,
-    "quality_p01": 0.704751377948973,
+    "points": 27322,
+    "triangles": 50038,
+    "boundary_edges": 4604,
+    "domain_area": 80.0,
+    "triangle_area_min": 3.022697995841752e-05,
+    "triangle_area_max": 0.05808648163771111,
+    "edge_length_min": 0.007952171025722564,
+    "edge_length_max": 0.40149406353650346,
+    "quality_min": 0.42542326033926037,
+    "quality_mean": 0.9566120992077726,
+    "quality_p01": 0.7008730428823706,
     "boundary_lengths": {
       "inlet": 1.0,
       "outlet": 2.0,
-      "upper_wall": 59.2,
+      "upper_wall": 44.2,
       "actuator": 0.7999999999999999,
       "upstream_lower_wall": 10.0,
       "step_wall": 1.0,
-      "downstream_lower_wall": 50.0
+      "downstream_lower_wall": 35.0
     }
   }
 }

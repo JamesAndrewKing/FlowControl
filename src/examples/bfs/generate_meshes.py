@@ -5,7 +5,7 @@ shifted vertically to the convention used by Boujo & Gallaire (2015):
 
 * inlet: ``x = -10``, ``1 <= y <= 2``;
 * step edge: ``(x, y) = (0, 1)``;
-* outlet: ``x = 50``, ``0 <= y <= 2``.
+* outlet: ``x = 35``, ``0 <= y <= 2``.
 
 The upper wall is split around the Gaussian actuator at ``x = -1``.  The
 nominal actuator segment extends four standard widths on either side of the
@@ -56,7 +56,7 @@ class MeshConfig:
     level: str
     scale: float
     x_in: float = -10.0
-    x_out: float = 50.0
+    x_out: float = 35.0
     y_bottom: float = 0.0
     y_step: float = 1.0
     y_top: float = 2.0
@@ -347,14 +347,14 @@ def _validate_statistics(stats: dict) -> None:
     expected_lengths = {
         "inlet": 1.0,
         "outlet": 2.0,
-        "upper_wall": 59.2,
+        "upper_wall": 44.2,
         "actuator": 0.8,
         "upstream_lower_wall": 10.0,
         "step_wall": 1.0,
-        "downstream_lower_wall": 50.0,
+        "downstream_lower_wall": 35.0,
     }
-    if not math.isclose(stats["domain_area"], 110.0, rel_tol=1e-10, abs_tol=1e-9):
-        raise RuntimeError(f"Expected domain area 110, got {stats['domain_area']}")
+    if not math.isclose(stats["domain_area"], 80.0, rel_tol=1e-10, abs_tol=1e-9):
+        raise RuntimeError(f"Expected domain area 80, got {stats['domain_area']}")
     if stats["triangle_area_min"] <= 0.0:
         raise RuntimeError("Mesh contains a zero-area triangle")
     if stats["quality_min"] <= 0.25:

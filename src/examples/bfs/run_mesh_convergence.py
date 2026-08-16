@@ -32,11 +32,11 @@ DEFAULT_REYNOLDS_PATH = (50.0, 100.0, 200.0, 300.0, 400.0, 500.0)
 EXPECTED_BOUNDARY_LENGTHS = {
     "inlet": 1.0,
     "outlet": 2.0,
-    "upper_wall": 59.2,
+    "upper_wall": 44.2,
     "actuator": 0.8,
     "upstream_lower_wall": 10.0,
     "step_wall": 1.0,
-    "downstream_lower_wall": 50.0,
+    "downstream_lower_wall": 35.0,
 }
 
 
