@@ -55,3 +55,42 @@ family has 16,238, 62,672, and 241,230 triangles from coarse to fine.
 The generator checks these measures, rejects zero-area triangles, and records
 element-quality statistics. All generated volume and facet files have also been
 read successfully with the project's legacy FEniCS 2019.1 environment.
+
+## Steady CFD and mesh convergence
+
+`bfsflowsolver.py` follows the lid-driven-cavity example's split between
+homogeneous perturbation boundary conditions and full-field steady boundary
+conditions. The inlet is the exact peak-one Poiseuille profile, the outlet uses
+the library's natural zero-traction condition, and all solid walls are no-slip
+apart from the upper-wall actuator. Positive actuator input is blowing into the
+domain and denotes volume flux per unit span; the finite-support Gaussian is
+normalized so its integral is one.
+
+Run the uncontrolled three-mesh study from the repository root with:
+
+```bash
+PYTHONPATH=src python src/examples/bfs/run_mesh_convergence.py \
+  --output-root ../AdiabaticFlowControl/data/bfs
+```
+
+Add `--actuations -0.01 0.0 0.01` to verify the mesh over the intended control
+range. The driver continues first in Reynolds number, then from the zero-input
+state toward each nonzero input. It writes self-describing runs below
+`mesh_convergence/<mesh_id>/<actuation>/`, including XDMF/HDF5 checkpoints,
+raw velocity/pressure/mixed vectors, DOF coordinates and mappings, dense wall
+shear, common-point samples, mass and nonlinear-residual diagnostics, and a
+manifest. The campaign summary compares velocity, kinetic energy, and primary
+reattachment location against the next finer mesh using the predeclared 0.5%
+threshold.
+
+After choosing a mesh, verify a checkpoint against the library's actual
+perturbation time-stepper with:
+
+```bash
+PYTHONPATH=src python src/examples/bfs/check_steady_restart.py \
+  --run-dir ../AdiabaticFlowControl/data/bfs/mesh_convergence/bfs_3/a_p0p00000
+```
+
+This writes `restart_invariance.json` beside the selected run and requires the
+zero perturbation about the frozen equilibrium to remain below the configured
+tolerance.

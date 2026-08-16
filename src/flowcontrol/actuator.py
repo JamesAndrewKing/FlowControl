@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import IntEnum
+import math
 from typing import Optional
 
 import dolfin
@@ -155,6 +156,63 @@ class ActuatorBCUniformU(ActuatorBC):
         )
 
         self.expression = expression
+
+
+@dataclass(kw_only=True)
+class ActuatorBCGaussianV(ActuatorBC):
+    """Finite-support, flux-normalized Gaussian vertical boundary actuator.
+
+    ``u_ctrl`` is the volume flux per unit span. ``inward_sign`` selects the
+    sign of the vertical velocity that points into the domain. Subtracting the
+    endpoint value makes the expression meet a neighboring no-slip boundary
+    continuously at the ends of its finite support.
+    """
+
+    position_x: float = 0.0
+    sigma: float = 0.1
+    half_widths: float = 4.0
+    inward_sign: float = 1.0
+    actuator_type: ACTUATOR_TYPE = ACTUATOR_TYPE.BC
+
+    @property
+    def half_width(self) -> float:
+        return self.half_widths * self.sigma
+
+    @property
+    def normalization(self) -> float:
+        endpoint = math.exp(-(self.half_widths**2))
+        integral = self.sigma * (
+            math.sqrt(math.pi) * math.erf(self.half_widths)
+            - 2.0 * self.half_widths * endpoint
+        )
+        return 1.0 / integral
+
+    def load_expression(self, flowsolver):
+        if self.sigma <= 0.0:
+            raise ValueError("Actuator sigma must be positive")
+        if self.half_widths <= 0.0:
+            raise ValueError("Actuator half_widths must be positive")
+        if self.inward_sign not in (-1.0, 1.0):
+            raise ValueError("Actuator inward_sign must be -1 or +1")
+
+        self.expression = dolfin.Expression(
+            [
+                "0.0",
+                (
+                    "fabs(x[0]-xc) > half_width ? 0.0 : "
+                    "inward_sign*u_ctrl*normalization*"
+                    "(exp(-pow((x[0]-xc)/sigma, 2))-endpoint)"
+                ),
+            ],
+            element=flowsolver.V.ufl_element(),
+            u_ctrl=0.0,
+            xc=self.position_x,
+            sigma=self.sigma,
+            half_width=self.half_width,
+            inward_sign=self.inward_sign,
+            normalization=self.normalization,
+            endpoint=math.exp(-(self.half_widths**2)),
+        )
 
 
 @dataclass(kw_only=True)
