@@ -139,6 +139,45 @@ Without an external output root, operators and eigenvalues are written below
 `data_output/bfs_3/spectral_validation`; with one, they are written below its
 `spectral_validation` directory instead.
 
+After exporting `A` and `E` at `a = -0.01, 0, 0.01`, compute the first
+adiabatic response in the FEniCS environment with:
+
+```bash
+PYTHONPATH=src python src/examples/bfs/compute_adiabatic_conditioning.py
+```
+
+The script differentiates the existing 21-point fixed branch and solves
+`A b1 = E x_star,a`. It records the mass norms, response ratios,
+finite-difference check, solve residuals, and response vectors under the local
+`data_output/bfs_3/conditioning` directory. If `ADIABATIC_BFS_DATA_ROOT` or
+`--output-root` is supplied, the results instead go to
+`critical_manifold/bfs_3/conditioning` in that research-data root.
+
+## Disturbance-memory time
+
+Measure the input-specific response tail at the two endpoints and center of
+the fixed branch with:
+
+```bash
+PYTHONPATH=src python src/examples/bfs/compute_disturbance_memory.py
+```
+
+The driver reuses the four-mode, zero-net-flux inlet packet defined by the
+transient-convergence study. The default pilot uses `dt = 0.01`, runs to
+`t = 250`, and defines `T_m(a)` by the last downward crossing of 5% of the
+peak perturbation energy. If a response has not crossed the threshold by the
+end, the summary marks it as horizon-censored and reports only a lower bound.
+Completed summaries also provide the frequencies corresponding to
+`omega_a,max T_m = 0.05, 0.1, 0.2`.
+
+The default production run advances 25,000 steps for each of three fixed
+points and is therefore intended as an overnight campaign. Individual cases
+can be run first with, for example, `--actuations 0`.
+
+Use `--smoke` for a 20-step local check. Results go below the local
+`data_output/bfs_3/disturbance_memory` directory, or below
+`disturbance_memory/bfs_3` when an external research-data root is supplied.
+
 On the former `x = 50` domain, the completed `bfs_3` to `bfs_4` comparison
 passed the `0.5%` criterion at `a = -0.01, 0, 0.01`; its largest
 lower-wall-shear and common-point velocity changes were `0.106%` and `0.021%`.
