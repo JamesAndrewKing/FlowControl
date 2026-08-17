@@ -112,6 +112,31 @@ Then run the short unactuated time-domain example:
 PYTHONPATH=src python src/examples/bfs/run_bfs_example.py
 ```
 
+## Fixed-point branch and eigenvalues
+
+Set the research-data root once, then continue the local `Re=500` checkpoint
+from zero actuation toward both ends of `[-0.01, 0.01]`:
+
+```bash
+export ADIABATIC_BFS_DATA_ROOT=../AdiabaticFlowControl/data/bfs
+PYTHONPATH=src python src/examples/bfs/compute_steady_state_increasing_actuation.py
+```
+
+The XDMF/HDF5 fixed-point checkpoints remain in
+`data_output/bfs_3/fixed_points`. Raw fields, wall observations, and manifests
+are exported to `critical_manifold/bfs_3` under the research-data root.
+
+Export the operators for a fixed point in the FEniCS environment, then compute
+eigenvalues in the complex SLEPc environment:
+
+```bash
+PYTHONPATH=src python src/examples/bfs/eig_compute_operators_bfs.py --actuation 0
+PYTHONPATH=src python src/examples/bfs/eig_compute_bfs.py --actuation 0
+```
+
+The operator exporter loads the matching local fixed point automatically and
+writes only `A.npz` and `E.npz` to the research-data root.
+
 On the former `x = 50` domain, the completed `bfs_3` to `bfs_4` comparison
 passed the `0.5%` criterion at `a = -0.01, 0, 0.01`; its largest
 lower-wall-shear and common-point velocity changes were `0.106%` and `0.021%`.

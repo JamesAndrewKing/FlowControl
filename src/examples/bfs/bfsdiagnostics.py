@@ -124,17 +124,18 @@ def wall_observations(fs) -> tuple[dict[str, np.ndarray], dict[str, list[float]]
 def common_velocity_samples(fs) -> tuple[np.ndarray, np.ndarray]:
     """Evaluate velocity at a mesh-independent set of interior points."""
 
+    geometry = fs.params_mesh.user_data
     upstream = np.array(
         [
             (x, y)
-            for x in np.linspace(-9.75, -0.25, 39)
+            for x in np.arange(geometry["x_in"] + 0.25, 0.0, 0.25)
             for y in np.linspace(1.05, 1.95, 10)
         ]
     )
     downstream = np.array(
         [
             (x, y)
-            for x in np.linspace(0.05, 49.75, 200)
+            for x in np.arange(0.05, geometry["x_out"], 0.25)
             for y in np.linspace(0.05, 1.95, 20)
         ]
     )
@@ -242,14 +243,17 @@ def save_ground_truth(
     mesh_name: str,
     actuation: float,
     continuation_history: list[dict],
+    campaign: str = "mesh_convergence",
+    write_steady_checkpoint: bool = True,
 ) -> dict:
-    """Write the steady checkpoint, raw arrays, observations, and manifest."""
+    """Write raw arrays, observations, metadata, and optionally a checkpoint."""
 
     run_dir.mkdir(parents=True, exist_ok=True)
-    steady_dir = run_dir / "steady"
-    steady_dir.mkdir(exist_ok=True)
-    flu.write_xdmf(steady_dir / "U0.xdmf", fs.fields.U0, "U0")
-    flu.write_xdmf(steady_dir / "P0.xdmf", fs.fields.P0, "P0")
+    if write_steady_checkpoint:
+        steady_dir = run_dir / "steady"
+        steady_dir.mkdir(exist_ok=True)
+        flu.write_xdmf(steady_dir / "U0.xdmf", fs.fields.U0, "U0")
+        flu.write_xdmf(steady_dir / "P0.xdmf", fs.fields.P0, "P0")
 
     up = fs.fields.UP0
     mapping = _velocity_to_mixed_mapping(fs, up)
@@ -319,7 +323,7 @@ def save_ground_truth(
         "schema_version": 1,
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "case": "backward_facing_step",
-        "campaign": "mesh_convergence",
+        "campaign": campaign,
         "mesh_id": mesh_name,
         "mesh_path": str(fs.params_mesh.meshpath),
         "mesh_metadata_sha256": _sha256(metadata),

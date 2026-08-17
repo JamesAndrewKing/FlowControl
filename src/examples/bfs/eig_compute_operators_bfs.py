@@ -1,7 +1,7 @@
-"""Export the BFS linearized operator A and descriptor mass matrix E.
+"""Export BFS linearized operators from a FlowControl fixed point.
 
-Fixed points are produced by ``run_mesh_convergence.py``.  Run this script in
-the FEniCS environment, for example with ``--mesh bfs_3 --actuation 0``.
+The fixed point remains under this example's ``data_output`` directory; the
+exported sparse matrices are written to the AdiabaticFlowControl data root.
 """
 
 import argparse
@@ -32,20 +32,34 @@ def save_matrix(matrix, filename):
 def main(args):
     root = Path(args.output_root).expanduser().resolve()
     case = actuation_slug(args.actuation)
-    fixed_point = root / "mesh_convergence" / args.mesh / case / "steady"
+    example_dir = Path(__file__).resolve().parent
+    fixed_point = (
+        args.fixed_point_dir.expanduser().resolve()
+        if args.fixed_point_dir is not None
+        else example_dir / "data_output" / args.mesh / "fixed_points" / case
+    )
+    velocity_file = fixed_point / "U0.xdmf"
+    pressure_file = fixed_point / "P0.xdmf"
+    if not velocity_file.exists() and args.actuation == 0.0:
+        reynolds = f"{args.reynolds:g}"
+        steady_dir = example_dir / "data_output" / args.mesh / "steady"
+        velocity_file = steady_dir / f"U0_Re={reynolds}.xdmf"
+        pressure_file = steady_dir / f"P0_Re={reynolds}.xdmf"
+    if not velocity_file.exists() or not pressure_file.exists():
+        raise FileNotFoundError(
+            f"Missing FlowControl fixed point: {velocity_file}, {pressure_file}"
+        )
     output = root / "spectral_validation" / args.mesh / case / "operators"
     output.mkdir(parents=True, exist_ok=True)
 
     fs = make_bfs_solver(
         mesh_name=args.mesh,
         reynolds=args.reynolds,
-        output_dir=output / "_scratch",
+        output_dir=example_dir / "data_output" / args.mesh / "_operator_scratch",
         save_every=0,
         verbose=0,
     )
-    fs.load_steady_state(
-        [fixed_point / "U0.xdmf", fixed_point / "P0.xdmf"]
-    )
+    fs.load_steady_state([velocity_file, pressure_file])
 
     operators = OperatorGetter(fs)
     A = operators.get_A(
@@ -72,6 +86,11 @@ def parse_args():
     parser.add_argument("--mesh", default="bfs_3")
     parser.add_argument("--actuation", type=float, default=0.0)
     parser.add_argument("--reynolds", type=float, default=500.0)
+    parser.add_argument(
+        "--fixed-point-dir",
+        type=Path,
+        help="override directory containing U0.xdmf and P0.xdmf",
+    )
     return parser.parse_args()
 
 
