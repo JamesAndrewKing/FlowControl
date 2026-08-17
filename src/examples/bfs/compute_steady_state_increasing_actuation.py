@@ -1,4 +1,8 @@
-"""Continue BFS fixed points in actuator amplitude on the production mesh."""
+"""Continue BFS fixed points in actuator amplitude on the production mesh.
+
+Checkpoints are always written locally. Supplying a research-data root also
+exports raw fields, wall observations, and manifests.
+"""
 
 import argparse
 import logging
@@ -9,7 +13,7 @@ import dolfin
 import numpy as np
 
 import utils.utils_flowsolver as flu
-from examples.bfs.bfsdiagnostics import save_ground_truth
+from examples.bfs.bfsdiagnostics import save_ground_truth, solution_diagnostics
 from examples.bfs.bfsflowsolver import make_bfs_solver
 
 
@@ -59,15 +63,18 @@ def solve_newton(fs, actuation, initial_guess):
 def export_fixed_point(fs, args, actuation, history, local_root, research_root):
     case = actuation_slug(actuation)
     write_fixed_point(fs, local_root / "fixed_points" / case)
-    diagnostics = save_ground_truth(
-        fs,
-        run_dir=research_root / "critical_manifold" / args.mesh / case,
-        mesh_name=args.mesh,
-        actuation=actuation,
-        continuation_history=history,
-        campaign="critical_manifold",
-        write_steady_checkpoint=False,
-    )
+    if research_root is None:
+        diagnostics, _ = solution_diagnostics(fs, actuation)
+    else:
+        diagnostics = save_ground_truth(
+            fs,
+            run_dir=research_root / "critical_manifold" / args.mesh / case,
+            mesh_name=args.mesh,
+            actuation=actuation,
+            continuation_history=history,
+            campaign="critical_manifold",
+            write_steady_checkpoint=False,
+        )
     logging.info(
         "a=%+.5f: residual %.3e, mass imbalance %.3e",
         actuation,
@@ -79,7 +86,11 @@ def export_fixed_point(fs, args, actuation, history, local_root, research_root):
 def main(args):
     example_dir = Path(__file__).resolve().parent
     local_root = example_dir / "data_output" / args.mesh
-    research_root = Path(args.output_root).expanduser().resolve()
+    research_root = (
+        Path(args.output_root).expanduser().resolve()
+        if args.output_root is not None
+        else None
+    )
     reynolds = f"{args.reynolds:g}"
 
     fs = make_bfs_solver(
@@ -140,9 +151,8 @@ def parse_args():
     default_output = os.environ.get("ADIABATIC_BFS_DATA_ROOT")
     parser.add_argument(
         "--output-root",
-        required=default_output is None,
         default=default_output,
-        help="AdiabaticFlowControl data/bfs directory",
+        help="optional external research-data root",
     )
     parser.add_argument("--mesh", default=MESH_NAME)
     parser.add_argument("--reynolds", type=float, default=REYNOLDS)

@@ -1,7 +1,6 @@
-"""Export BFS linearized operators from a FlowControl fixed point.
+"""Export BFS linearized operators from a local FlowControl fixed point.
 
-The fixed point remains under this example's ``data_output`` directory; the
-exported sparse matrices are written to the AdiabaticFlowControl data root.
+Matrices are written locally unless an external research-data root is given.
 """
 
 import argparse
@@ -30,7 +29,6 @@ def save_matrix(matrix, filename):
 
 
 def main(args):
-    root = Path(args.output_root).expanduser().resolve()
     case = actuation_slug(args.actuation)
     example_dir = Path(__file__).resolve().parent
     fixed_point = (
@@ -49,7 +47,18 @@ def main(args):
         raise FileNotFoundError(
             f"Missing FlowControl fixed point: {velocity_file}, {pressure_file}"
         )
-    output = root / "spectral_validation" / args.mesh / case / "operators"
+    if args.output_root is None:
+        output = (
+            example_dir
+            / "data_output"
+            / args.mesh
+            / "spectral_validation"
+            / case
+            / "operators"
+        )
+    else:
+        root = Path(args.output_root).expanduser().resolve()
+        output = root / "spectral_validation" / args.mesh / case / "operators"
     output.mkdir(parents=True, exist_ok=True)
 
     fs = make_bfs_solver(
@@ -80,9 +89,7 @@ def main(args):
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     default_root = os.environ.get("ADIABATIC_BFS_DATA_ROOT")
-    parser.add_argument(
-        "--output-root", required=default_root is None, default=default_root
-    )
+    parser.add_argument("--output-root", default=default_root)
     parser.add_argument("--mesh", default="bfs_3")
     parser.add_argument("--actuation", type=float, default=0.0)
     parser.add_argument("--reynolds", type=float, default=500.0)

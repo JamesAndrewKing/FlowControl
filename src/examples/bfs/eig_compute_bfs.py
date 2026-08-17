@@ -22,9 +22,18 @@ def actuation_slug(value):
 
 
 def main(args):
-    root = Path(args.output_root).expanduser().resolve()
     case = actuation_slug(args.actuation)
-    output = root / "spectral_validation" / args.mesh / case
+    if args.output_root is None:
+        output = (
+            Path(__file__).resolve().parent
+            / "data_output"
+            / args.mesh
+            / "spectral_validation"
+            / case
+        )
+    else:
+        root = Path(args.output_root).expanduser().resolve()
+        output = root / "spectral_validation" / args.mesh / case
     operator_path = output / "operators"
 
     A = sparse_to_petscmat(sparse.load_npz(operator_path / "A.npz"))
@@ -76,9 +85,7 @@ def main(args):
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     default_root = os.environ.get("ADIABATIC_BFS_DATA_ROOT")
-    parser.add_argument(
-        "--output-root", required=default_root is None, default=default_root
-    )
+    parser.add_argument("--output-root", default=default_root)
     parser.add_argument("--mesh", default="bfs_3")
     parser.add_argument("--actuation", type=float, default=0.0)
     parser.add_argument("--targets", nargs="+", type=complex, default=[0j])
