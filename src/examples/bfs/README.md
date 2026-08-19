@@ -178,6 +178,47 @@ Use `--smoke` for a 20-step local check. Results go below the local
 `data_output/bfs_3/disturbance_memory` directory, or below
 `disturbance_memory/bfs_3` when an external research-data root is supplied.
 
+## Deterministic adiabatic trajectories and models
+
+Stage 2 tests whether finite-rate deterministic lag is organized by
+`(a, a_dot, a_ddot)` when the inlet disturbance is disabled. Generate two
+independent training trajectories at the nominal bandwidth and one held-out
+phase realization at each test bandwidth:
+
+```bash
+PYTHONPATH=src python src/examples/bfs/run_deterministic_adiabatic.py \
+  --split train --seed 1 --epsilon 0.1
+PYTHONPATH=src python src/examples/bfs/run_deterministic_adiabatic.py \
+  --split train --seed 4 --epsilon 0.1
+PYTHONPATH=src python src/examples/bfs/run_deterministic_adiabatic.py \
+  --split test --seed 101 --epsilon 0.2
+PYTHONPATH=src python src/examples/bfs/run_deterministic_adiabatic.py \
+  --split test --seed 101 --epsilon 0.1
+PYTHONPATH=src python src/examples/bfs/run_deterministic_adiabatic.py \
+  --split test --seed 101 --epsilon 0.05
+```
+
+The paired-phase multisine starts at `a(0) = 0`, remains inside the fixed
+branch, and saves exact derivatives. The default half-cycle trajectories use
+`T_m = 106.234`, 61 segment-averaged lower-wall skin-friction observations at
+unit-time spacing, and total velocity/pressure XDMF checkpoints every 10 time
+units. Set `--field-dt 0` for an observation-only pilot. Use `--smoke` for a
+20-step local data-contract check.
+
+Fit the observable-space models after all runs finish:
+
+```bash
+PYTHONPATH=src python src/examples/bfs/fit_adiabatic_models.py
+```
+
+`M0` is the cubic interpolation of the 21-point critical wall manifold. `M1`
+adds `b1(a) a_dot`; `M2` additionally adds `b2(a) a_ddot` and
+`b11(a) a_dot^2`. Cubic coefficient functions are fitted once using only the
+training runs. The postprocessor rejects rank-deficient designs, evaluates
+the held-out runs, and reports the log-log error slopes targeted at `1, 2, 3`.
+The primary fit uses wall observations; streamed full fields are retained for
+separate phase-space validation.
+
 On the former `x = 50` domain, the completed `bfs_3` to `bfs_4` comparison
 passed the `0.5%` criterion at `a = -0.01, 0, 0.01`; its largest
 lower-wall-shear and common-point velocity changes were `0.106%` and `0.021%`.
