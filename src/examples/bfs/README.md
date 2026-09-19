@@ -219,6 +219,60 @@ the held-out runs, and reports the log-log error slopes targeted at `1, 2, 3`.
 The primary fit uses wall observations; streamed full fields are retained for
 separate phase-space validation.
 
+### Running Stage 2 on ETH Euler
+
+Clone the pushed feature branch into personal scratch and create the Linux
+FEniCS environment:
+
+```bash
+cd "${SCRATCH}"
+git clone --branch feature/bfs \
+  https://github.com/JamesAndrewKing/FlowControl.git
+cd FlowControl
+bash src/examples/bfs/setup_euler.sh
+```
+
+The fixed points are generated data and are not stored in Git. From the local
+Mac, copy the complete 21-point branch (replace `<ETH_USERNAME>`):
+
+```bash
+rsync -ah --info=progress2 \
+  /Users/james/FlowControl/src/examples/bfs/data_output/bfs_3/fixed_points/ \
+  <ETH_USERNAME>@euler.ethz.ch:/cluster/scratch/<ETH_USERNAME>/FlowControl/src/examples/bfs/data_output/bfs_3/fixed_points/
+```
+
+Before the production run, use four separate array tasks to compare
+`dt = 0.005, 0.01, 0.02, 0.04` on the same short trajectory. The finest run
+checks the existing `dt = 0.01` choice; the coarser runs test whether the
+production step count can be reduced:
+
+```bash
+cd "${SCRATCH}/FlowControl"
+sbatch --time=48:00:00 --array=0-3 \
+  --export=ALL,BFS_ADIABATIC_MODE=timestep \
+  src/examples/bfs/submit_euler_adiabatic.slurm
+```
+
+Compare the histories at their common unit-time observations against the
+`dt = 0.005` run. Normalize the error by the RMS finite-rate lag
+`y - y_star(a)`, rather than by the much larger total wall shear. Keep
+`dt = 0.01` unless a larger step changes this lag by less than `0.5%` and the
+error decreases consistently under refinement. Then submit the five
+production trajectories and make the fit job depend on the complete array:
+
+```bash
+campaign_job=$(sbatch --parsable \
+  src/examples/bfs/submit_euler_adiabatic.slurm)
+sbatch --dependency="afterok:${campaign_job}" \
+  src/examples/bfs/submit_euler_adiabatic_fit.slurm
+```
+
+Set `BFS_ADIABATIC_DT` only after the pilot, for example with
+`--export=ALL,BFS_ADIABATIC_DT=0.02`. Results default to
+`${SCRATCH}/AdiabaticFlowControl/data/bfs`. Check jobs with `myjobs` or
+`squeue -u "${USER}"`. Personal scratch is not backed up and files older than
+15 days are deleted, so copy completed results to durable storage promptly.
+
 On the former `x = 50` domain, the completed `bfs_3` to `bfs_4` comparison
 passed the `0.5%` criterion at `a = -0.01, 0, 0.01`; its largest
 lower-wall-shear and common-point velocity changes were `0.106%` and `0.021%`.
