@@ -1,290 +1,212 @@
-% filepath: /Users/jaking/Desktop/PhD/Cylinder/controller_design.m
+%% Structured order-5 controller from Salmon, section 3.4.1.
+%
+% K(s) = (b4*s^4 + b3*s^3 + b2*s^2 + b1*s) /
+%        (s^5 + a4*s^4 + a3*s^3 + a2*s^2 + a1*s + a0)
+%
+% The missing constant numerator coefficient enforces K(0)=0. The controller
+% denominator is parameterized by stable factors, and the nine free parameters
+% are searched independently of any later nonlinear optimization.
 
-% --- Load frequency response data ---
-data_G = load('data_output/nyquist/G_vals.mat');
-data_omega = load('data_output/nyquist/omega_range.mat');
-omega_data = data_omega.omega_range(:).';
-G_vals_data = data_G.G_vals(:).';
+clear; close all; clc;
 
-% --- Define desired frequency grid ---
-omega_grid = logspace(-2, 2, 100); % 10^-2 to 10^2 rad/s
+this_dir = fileparts(mfilename('fullpath'));
+rom_file = fullfile(this_dir, 'data_input', 'sysid_o16_d=3_ssest.mat');
+output_file = fullfile(this_dir, 'data_input', ...
+    'K_thesis_structured_order5.mat');
+fallback_file = fullfile(this_dir, 'data_input', ...
+    'K_thesis_structured_order5_fmincon.mat');
+legacy_file = fullfile(this_dir, 'K_tuned_stable.mat');
 
-% --- Interpolate data to desired omega_range ---
-G_vals = interp1(omega_data, G_vals_data, omega_grid, 'spline', 'extrap');
+rom_data = load(rom_file);
+ROM = minreal(ss(rom_data.A, rom_data.B, rom_data.C, rom_data.D), ...
+    1e-9, false);
+assert(order(ROM) == 16 && size(ROM,1) == 1 && size(ROM,2) == 1);
 
-% --- Create idfrd object for system identification ---
-Ts = 0; % Continuous-time
-sys_idfrd = idfrd(G_vals(:), omega_grid(:), Ts);
+design.minimum_decay = 0.03;
+design.frequency = logspace(-4, 4, 2000);
+design.n_random_starts = 80;
+design.n_local_starts = 24;
+design.seed = 4;
+design.numerator_scale = [10, 2e4, 2e4, 3e4];
 
-% --- Fit reduced-order model (ROM) using ssest ---
-order_ROM = 16;
-opt = ssestOptions('Focus','simulation','Display','on');
-ROM = ssest(sys_idfrd, order_ROM, opt);
+% Three stable real poles and one stable conjugate pair give a general enough
+% fifth-order denominator while guaranteeing controller stability. The first
+% five optimization variables are logarithms of positive quantities:
+% [p1 p2 p3 omega zeta].
+lower = [log(0.02)*ones(1,3), log(0.05), log(0.03), -20*ones(1,4)];
+upper = [log(500)*ones(1,3), log(100), log(3), 20*ones(1,4)];
 
-ROM = balreal(ROM);
-ROM = minreal(ROM);
+legacy = load(legacy_file);
+[legacy_num, ~] = tfdata(tf(legacy.K_tuned), 'v');
+legacy_poles = pole(legacy.K_tuned);
+real_poles = sort(-real(legacy_poles(abs(imag(legacy_poles)) < 1e-8))).';
+pair = legacy_poles(imag(legacy_poles) > 0);
+omega0 = abs(pair(1));
+zeta0 = -real(pair(1))/omega0;
+theta0 = [log(real_poles), log(omega0), log(zeta0), ...
+    legacy_num(1:4)./design.numerator_scale];
+theta0 = min(max(theta0, lower), upper);
 
-% --- Bode plot comparison: Full-order (data) vs ROM ---
-figure;
-subplot(2,1,1);
-semilogx(omega_grid, 20*log10(abs(G_vals)), 'b', 'LineWidth', 1.5); hold on;
-[mag_rom,~,wout] = bode(ROM, omega_grid);
-semilogx(omega_grid, 20*log10(squeeze(mag_rom)), 'r--', 'LineWidth', 1.5);
-grid on;
-ylabel('Magnitude (dB)');
-legend('Full-order','ROM');
-title('Bode Plot: Magnitude');
+objective = @(theta) synthesis_cost(theta, ROM, design);
+options = optimoptions('fmincon', 'Algorithm', 'sqp', 'Display', 'off', ...
+    'MaxIterations', 500, 'MaxFunctionEvaluations', 6000, ...
+    'OptimalityTolerance', 1e-7, 'StepTolerance', 1e-9);
 
-subplot(2,1,2);
-semilogx(omega_grid, mod(rad2deg(angle(G_vals)),360), 'b', 'LineWidth', 1.5); hold on;
-[~,phase_rom,~] = bode(ROM, omega_grid);
-semilogx(omega_grid, mod(squeeze(phase_rom),360), 'r--', 'LineWidth', 1.5);
-grid on;
-ylabel('Phase (deg)');
-xlabel('Frequency (rad/s)');
-legend('Full-order','ROM');
-title('Bode Plot: Phase');
+% First rank broad deterministic samples cheaply, then refine only the best.
+rng(design.seed);
+starts = repmat(lower, design.n_random_starts, 1) + ...
+    rand(design.n_random_starts, numel(lower)).* ...
+    repmat(upper-lower, design.n_random_starts, 1);
+starts(:,6:9) = 2*randn(design.n_random_starts,4);
+nearby = theta0 + [0.8*randn(40,5), 0.8*randn(40,4)];
+nearby = min(max(nearby, lower), upper);
+starts = [theta0; nearby; starts];
+start_cost = zeros(size(starts,1),1);
+for index = 1:size(starts,1)
+    start_cost(index) = objective(starts(index,:));
+end
+[~, ranking] = sort(start_cost);
 
-[A,B,C,D] = ssdata(ROM);
-
-% Unstable modes
-p = eig(A);
-unstable_idx = real(p) > 0;
-
-A_u = A(unstable_idx,unstable_idx);
-B_u = B(unstable_idx,:);
-
-rank_ctrb = rank(ctrb(A_u,B_u));
-
-disp('Unstable eigenvalues:');
-disp(p(unstable_idx));
-
-disp('Controllability rank (unstable subspace):');
-disp(rank_ctrb);
-disp(size(A_u,1));
-
-rank_obsv = rank(obsv(A_u,C(:,unstable_idx)));
-
-disp('Observability rank (unstable subspace):');
-disp(rank_obsv);
-
-%%
-
-% --- 1. Define tunable parameters for the 5th-order controller ---
-% Syntax: realp('name', initial_value)
-% Insert AnalysisPoint at the plant input (control signal)
-AP = AnalysisPoint('LoopIn');
-
-% Connect the AnalysisPoint in series with the plant
-G_with_AP = AP * ROM;
-
-% Denominator coefficients (a0 to a4)
-% Initialized to 1 as a safe starting point
-a0 = realp('a0', 1);
-a1 = realp('a1', 1);
-a2 = realp('a2', 1);
-a3 = realp('a3', 1);
-a4 = realp('a4', 1);
-
-% Numerator coefficients (b1 to b4)
-% Note: b0 is deliberately excluded (kept as 0) to enforce K(0) = 0
-b1 = realp('b1', 0);
-b2 = realp('b2', 0);
-b3 = realp('b3', 0);
-b4 = realp('b4', 0);
-
-% --- 2. Construct the observability canonical form matrices ---
-% This perfectly matches Equation (3.41) in the thesis
-L = [0, 0, 0, 0, -a0;
-     1, 0, 0, 0, -a1;
-     0, 1, 0, 0, -a2;
-     0, 0, 1, 0, -a3;
-     0, 0, 0, 1, -a4];
-
-M = [0; b1; b2; b3; b4];
-
-N = [0, 0, 0, 0, 1];
-
-D = 0; % The controller is strictly causal (no direct feedthrough)
-
-% Create the tunable state-space controller (generalized state-space model)
-% K_tune = ss(L, M, N, D);
-K_tune = tunableSS('K_tune', 5, 1, 1);
-
-% --- 3. Define the closed-loop system ---
-% The thesis implies standard feedback to stabilize the unstable plant modes.
-% feedback(Plant, Controller, +1/-1). We assume standard negative feedback.
-% CL_tune = feedback(ROM * K_tune, 1); 
-% Insert AnalysisPoint at controller output
-APu = AnalysisPoint('u');
-
-% Connect: plant input AP, controller, controller output APu, plant
-CL_tune = feedback(G_with_AP * K_tune * APu, 1);
-
-% CL_tune = feedback(G_with_AP * K_tune, 1);
-
-% --- 4. Define Tuning Goals ---
-% The thesis requires: "poles of bounded growth rate, i.e. less than -0.03"
-% TuningGoal.Poles(MinDecay, MinDamping, MaxFrequency)
-% A MinDecay of 0.03 forces all closed-loop poles p to have Real(p) < -0.03
-MinDecay = 0.03;
-umax = 1;
-s = tf('s');
-W = 10*(s/50 + 1)/(s/0.1 + 1);
-Req_CL_Poles = TuningGoal.Poles(MinDecay, 0, Inf);
-Req_Margins = TuningGoal.Margins('LoopIn', 2, 20);
-Req_K_Poles = TuningGoal.ControllerPoles('K_tune', -0.01);
-Req_Control = TuningGoal.Gain('LoopIn', 'u', umax);
-Req_Weighted = TuningGoal.WeightedGain('LoopIn', 'u', 1, W/umax);
-
-% --- 5. Run SYSTUNE ---
-% Because the optimization is non-convex, using multiple random starting 
-% points is highly recommended to find the best local minimum.
-opt_systune = systuneOptions('RandomStart', 100, 'Display', 'final');
-
-disp('Starting structured H-infinity synthesis...');
-% [CL_tuned, fSoft] = systune(CL_tune, Req_CL_Poles, opt_systune);
-% [CL_tuned, fSoft] = systune(CL_tune, [Req_CL_Poles, Req_Margins], opt_systune);
-[CL_tuned, fSoft] = systune(CL_tune, [Req_CL_Poles, Req_Margins, Req_K_Poles, Req_Weighted, Req_Control], opt_systune);
-
-%% --- 6. Extract the tuned controller ---
-% Extract the tuned parameters and substitute them back into our controller block
-tuned_blocks = getBlockValue(CL_tuned);
-K_tuned = replaceBlock(K_tune, tuned_blocks);
-
-% Convert the tunable ss object to a standard numeric ss object
-K_tuned = ss(K_tuned); 
-
-% --- 7. Verification Checks ---
-disp('--- Controller Synthesis Results ---');
-% 1. Check if the controller itself is stable (as requested by the thesis)
-if isstable(K_tuned)
-    disp('Success: The tuned controller is stable.');
-else
-    disp('Warning: The tuned controller is unstable.');
-    disp('You may need to increase the number of RandomStarts in systune.');
+best.theta = theta0;
+best.cost = objective(theta0);
+for index = 1:min(design.n_local_starts, numel(ranking))
+    [theta, cost] = fmincon(objective, starts(ranking(index),:), ...
+        [], [], [], [], lower, upper, [], options);
+    if cost < best.cost
+        best.theta = theta;
+        best.cost = cost;
+    end
 end
 
-% 2. Check the closed-loop poles
-CL_numeric = feedback(ROM * K_tuned, 1);
-max_real_pole = max(real(pole(CL_numeric)));
-fprintf('Maximum real part of closed-loop poles: %.4f (Target < -0.03)\n', max_real_pole);
+[~, metrics, coefficients] = synthesis_cost(best.theta, ROM, design);
+fprintf('Best search abscissa before acceptance: %.6e\n', ...
+    metrics.closed_loop_abscissa);
+method = 'fmincon fallback';
+[A, B, C, D, K_tuned] = canonical_controller(coefficients);
+fallback_metrics = metrics;
+fallback_coefficients = coefficients;
+fallback_method = method;
+save(fallback_file, 'A', 'B', 'C', 'D', 'K_tuned', ...
+    'fallback_coefficients', 'fallback_metrics', 'design', ...
+    'fallback_method');
 
-% Optional: Plot the controller's Bode plot
-%%
-w = logspace(-4, 4, 100); % Frequency grid matching your previous plots
+% When Robust Control Toolbox is available, refine the same exact transfer-
+% function structure with systune. b0 remains fixed rather than merely being
+% initialized to zero. The pole goal is soft (as in systune synthesis), while
+% standalone controller stability is a hard constraint.
+if license('test', 'Robust_Toolbox')
+    [K_seed, ~] = make_controller(best.theta, design);
+    [seed_num, seed_den] = tfdata(K_seed, 'v');
+    K_block = tunableTF('K', 4, 5);
+    K_block.Numerator.Value = seed_num(end-4:end);
+    K_block.Numerator.Value(end) = 0;
+    K_block.Numerator.Free = [true, true, true, true, false];
+    K_block.Numerator.Scale = max(abs(K_block.Numerator.Value), 1);
+    K_block.Denominator.Value = seed_den;
+    K_block.Denominator.Scale = max(abs(seed_den), 1);
 
-
-[mag_K, phase_K, ~] = bode(K_tuned, w);
-
-% Squeeze to 1D arrays
-mag_K = squeeze(mag_K);
-phase_K = squeeze(phase_K);
-
-% Wrap phase to [-180, 180]
-phase_K_wrapped = mod(phase_K, 360) - 180;
-
-figure;
-subplot(2,1,1);
-semilogx(w, 20*log10(mag_K), 'b', 'LineWidth', 1.5);
-grid on;
-ylabel('Magnitude (dB)');
-title('Bode Plot: Controller Magnitude');
-
-subplot(2,1,2);
-semilogx(w, phase_K_wrapped, 'b', 'LineWidth', 1.5);
-grid on;
-ylabel('Phase (deg)');
-xlabel('Frequency (rad/s)');
-title('Bode Plot: Controller Phase');
-
-%%
-if isstable(K_tuned) && max_real_pole < -0.03
-    disp('Saving stable controller...');
-    [A,B,C,D] = ssdata(K_tuned);
-    save('K_tuned_stable.mat','A','B','C','D','K_tuned');
+    tune_model = feedback(ROM*K_block, 1);
+    closed_poles = TuningGoal.Poles(design.minimum_decay, 0, Inf);
+    stable_controller = TuningGoal.ControllerPoles('K', 1e-4, 0, Inf);
+    tune_options = systuneOptions('RandomStart', 20, 'Display', 'final');
+    [tuned_model, f_soft, g_hard] = systune(tune_model, ...
+        closed_poles, stable_controller, tune_options);
+    K_systune = minreal(ss(getBlockValue(tuned_model, 'K')), 1e-9, false);
+    systune_metrics = evaluate_controller(ROM, K_systune, design.frequency);
+    if g_hard <= 1 && systune_metrics.closed_loop_abscissa < ...
+            metrics.closed_loop_abscissa
+        [num, den] = tfdata(tf(K_systune), 'v');
+        num = num(end-4:end);
+        num(end) = 0;
+        leading = den(1);
+        den = den/leading;
+        num = num/leading;
+        coefficients.a = fliplr(den(2:end));
+        coefficients.b = fliplr(num(1:4));
+        metrics = systune_metrics;
+        metrics.f_soft = f_soft;
+        metrics.g_hard = g_hard;
+        method = 'systune';
+    end
 end
-%%
 
-% % Insert AnalysisPoints
-% AP_in = AnalysisPoint('LoopIn');
-% AP_out = AnalysisPoint('u');
-% 
-% % Interconnect
-% G_with_AP = AP_in * ROM;
-% K_tune = tunableSS('K_tune', 8, 1, 1); % 8th order, strictly proper
-% CL_tune = feedback(G_with_AP * K_tune * AP_out, 1);
-% 
-% % Tuning goals
-% M = 1; % Minimum modulus margin
-% s = tf('s');
-% % W_KS = 10 * (s/50 + 1)/(s/0.1 + 1); % 20 dB at low freq, cutoff at 50 rad/s
-% W_KS = 10 * (s/50 + 1)/((s/0.1 + 1)*(s/200 + 1));
-% 
-% Req_S = TuningGoal.Gain('LoopIn', 'LoopIn', M);
-% Req_KS = TuningGoal.WeightedGain('LoopIn', 'u', 1, W_KS);
-% Req_K_Poles = TuningGoal.ControllerPoles('K_tune', -0.01);
-% Req_Poles = TuningGoal.Poles(0.1, 0, Inf);
-% 
-% % Systune
-% opt = systuneOptions('RandomStart', 10, 'Display', 'final');
-% [CL_tuned, fSoft] = systune(CL_tune, [Req_S, Req_KS, Req_Poles, Req_K_Poles], opt);
+assert(metrics.controller_abscissa < 0, 'Controller is not stable.');
+assert(metrics.closed_loop_abscissa <= -design.minimum_decay, ...
+    'No structured controller achieved the required -0.03 decay.');
 
+% Exact observable-canonical realization, equations (3.40)-(3.42).
+[A, B, C, D, K_tuned] = canonical_controller(coefficients);
+a0 = coefficients.a(1); a1 = coefficients.a(2);
+a2 = coefficients.a(3); a3 = coefficients.a(4);
+a4 = coefficients.a(5);
+b1 = coefficients.b(1); b2 = coefficients.b(2);
+b3 = coefficients.b(3); b4 = coefficients.b(4);
 
-% %% =========================================================
-% %  IMPROVED H∞ CONTROLLER DESIGN (STABLE + WELL-SCALED)
-% %% =========================================================
-% 
-% ROM.InputName = 'u';
-% ROM.OutputName = 'y';
-% 
-% s = tf('s');
-% 
-% % Target instability region (~0.1–1 rad/s dynamics)
-% w0 = 1;
-% 
-% % Performance weight (moderate, not extreme)
-% Wp = (s/w0 + 0.3) / (s/w0 + 3);
-% 
-% % Control effort weight (IMPORTANT: increase damping of solution)
-% Wu = 1;
-% 
-% P = augw(ROM, Wp, Wu);
-% 
-% nmeas = 1;
-% ncont = 1;
-% 
-% [K_hinf, CL, gamma] = hinfsyn(P, nmeas, ncont);
-% 
-% CL_final = feedback(ROM, K_hinf);
-% 
-% p = pole(CL_final);
-% 
-% disp('Closed-loop poles (corrected H∞ design):');
-% disp(p);
-% 
-% disp('H∞ gamma:');
-% disp(gamma);
-% 
-% figure;
-% bode(K_hinf,{1e-2,1e2});
-% grid on;
-% title('Improved H∞ Controller');
-% 
-% figure;
-% plot(real(p), imag(p), 'x');
-% grid on;
-% xlabel('Real');
-% ylabel('Imag');
-% title('Closed-loop Poles');
-% 
-% %%
-% dt = 0.005;
-% Kd = c2d(K_hinf, dt, 'tustin');
-% 
-% A = Kd.A;
-% B = Kd.B;
-% C = Kd.C;
-% D = Kd.D;
-% 
-% save('K_discrete.mat','A','B','C','D');
+fprintf('\nStructured order-5 synthesis\n');
+fprintf('method = %s\n', method);
+fprintf('K(0) = %.3e\n', dcgain(K_tuned));
+fprintf('controller abscissa = %.4e\n', metrics.controller_abscissa);
+fprintf('closed-loop abscissa = %.4e (required <= -%.3f)\n', ...
+    metrics.closed_loop_abscissa, design.minimum_decay);
+fprintf('max|S| = %.3f; max|K*S| = %.3f\n', ...
+    metrics.max_sensitivity, metrics.max_command_gain);
+disp('denominator [1 a4 a3 a2 a1 a0]:');
+disp([1, a4, a3, a2, a1, a0]);
+disp('numerator [b4 b3 b2 b1 0]:');
+disp([b4, b3, b2, b1, 0]);
+
+save(output_file, 'A', 'B', 'C', 'D', 'K_tuned', 'coefficients', ...
+    'metrics', 'design', 'method');
+
+function [cost, metrics, coefficients] = synthesis_cost(theta, plant, design)
+    [K, coefficients] = make_controller(theta, design);
+    closed = feedback(plant, K);
+    metrics.controller_abscissa = max(real(pole(K)));
+    metrics.closed_loop_abscissa = max(real(pole(closed)));
+
+    % Primary goal: minimize the rightmost closed-loop pole. Stability of K
+    % is guaranteed by its factorized denominator parameterization.
+    cost = metrics.closed_loop_abscissa + 1e-9*sum(theta(6:9).^2);
+
+    if nargout > 1
+        metrics = evaluate_controller(plant, K, design.frequency);
+    end
+end
+
+function metrics = evaluate_controller(plant, K, w)
+    metrics.controller_abscissa = max(real(pole(K)));
+    metrics.closed_loop_abscissa = max(real(pole(feedback(plant, K))));
+    loop = reshape(freqresp(plant*K, w), 1, []);
+    S = 1./(1 + loop);
+    K_w = reshape(freqresp(K, w), 1, []);
+    metrics.max_sensitivity = max(abs(S));
+    metrics.max_command_gain = max(abs(K_w.*S));
+end
+
+function [K, coefficients] = make_controller(theta, design)
+    real_rates = exp(theta(1:3));
+    omega = exp(theta(4));
+    zeta = exp(theta(5));
+    denominator = conv(poly(-real_rates), [1, 2*zeta*omega, omega^2]);
+    numerator = [theta(6:9).*design.numerator_scale, 0];
+    K = tf(numerator, denominator);
+    coefficients.a = fliplr(denominator(2:end)); % [a0 ... a4]
+    coefficients.b = fliplr(numerator(1:end-1)); % [b1 ... b4]
+end
+
+function [A, B, C, D, K] = canonical_controller(coefficients)
+    a0 = coefficients.a(1); a1 = coefficients.a(2);
+    a2 = coefficients.a(3); a3 = coefficients.a(4);
+    a4 = coefficients.a(5);
+    b1 = coefficients.b(1); b2 = coefficients.b(2);
+    b3 = coefficients.b(3); b4 = coefficients.b(4);
+    A = [0, 0, 0, 0, -a0;
+         1, 0, 0, 0, -a1;
+         0, 1, 0, 0, -a2;
+         0, 0, 1, 0, -a3;
+         0, 0, 0, 1, -a4];
+    B = [0; b1; b2; b3; b4];
+    C = [0, 0, 0, 0, 1];
+    D = 0;
+    K = minreal(ss(A,B,C,D), 1e-9, false);
+end
